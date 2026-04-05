@@ -1,0 +1,89 @@
+// Exercise 8: CLI Tool
+// ──────────────────────────────────────────────
+// Practice: full project — args, file I/O, pipelines, error handling
+//
+// Build a simple "note" CLI tool:
+//   notes add "buy groceries"    → appends to notes.txt
+//   notes list                   → prints all notes
+//   notes search "grocery"       → finds matching notes
+//   notes clear                  → deletes all notes
+//
+// TODO: Implement the CLI, then run:
+//   lateralus run exercises/08-cli.ltl -- add "my first note"
+//   lateralus run exercises/08-cli.ltl -- list
+
+let NOTES_FILE = "notes.txt"
+
+/// Load notes from file, return empty array if file doesn't exist
+fn load_notes() -> [string] {
+    // HINT: try reading the file, recover with empty array
+    // YOUR CODE HERE
+}
+
+/// Save notes to file (one per line)
+fn save_notes(notes: [string]) -> Result<none, string> {
+    // YOUR CODE HERE
+}
+
+/// Add a note
+fn cmd_add(text: string) -> Result<none, string> {
+    // Load existing, append new, save
+    // YOUR CODE HERE
+}
+
+/// List all notes with numbers
+fn cmd_list() {
+    let notes = load_notes()
+    if notes.is_empty() {
+        print("No notes yet. Add one with: notes add \"your note\"")
+        return
+    }
+    // Print numbered list
+    // YOUR CODE HERE
+}
+
+/// Search notes for a keyword (case-insensitive)
+fn cmd_search(query: string) {
+    // Filter and display matches
+    // YOUR CODE HERE
+}
+
+/// Clear all notes
+fn cmd_clear() -> Result<none, string> {
+    // YOUR CODE HERE
+}
+
+// ─── Main ───────────────────────────────────────────────
+
+fn main() {
+    let args = env::args()
+
+    match args[1..] {
+        ["add", ...rest] => {
+            let text = rest.join(" ")
+            match cmd_add(text) {
+                Ok(_)  => print("✓ Added: ${text}"),
+                Err(e) => print("Error: ${e}")
+            }
+        },
+        ["list"]            => cmd_list(),
+        ["search", query]   => cmd_search(query),
+        ["clear"]           => {
+            match cmd_clear() {
+                Ok(_)  => print("✓ All notes cleared"),
+                Err(e) => print("Error: ${e}")
+            }
+        },
+        _ => {
+            print("📝 Notes — A simple CLI note tool")
+            print("")
+            print("Usage:")
+            print("  notes add <text>      Add a note")
+            print("  notes list            List all notes")
+            print("  notes search <word>   Search notes")
+            print("  notes clear           Delete all notes")
+        }
+    }
+}
+
+main()

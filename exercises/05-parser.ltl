@@ -1,0 +1,76 @@
+// Exercise 5: Safe Parser
+// ──────────────────────────────────────────────
+// Practice: Result, try/recover, error handling, ?
+//
+// Build a safe config parser that handles errors gracefully.
+//
+// TODO: Implement the parsing functions, then run:
+//   lateralus run exercises/05-parser.ltl
+
+struct Config {
+    host: string,
+    port: int,
+    debug: bool,
+}
+
+/// Parse a "key=value" line into a (key, value) tuple
+/// Returns Err if the line doesn't contain "="
+///
+///   parse_line("host=localhost") → Ok(("host", "localhost"))
+///   parse_line("invalid")       → Err("missing '=' in line: invalid")
+fn parse_line(line: string) -> Result<(string, string), string> {
+    // YOUR CODE HERE
+}
+
+/// Parse a port string into an integer between 1 and 65535
+/// Returns Err for non-numeric or out-of-range values
+///
+///   parse_port("8080")  → Ok(8080)
+///   parse_port("abc")   → Err("invalid port number: abc")
+///   parse_port("99999") → Err("port out of range: 99999")
+fn parse_port(s: string) -> Result<int, string> {
+    // YOUR CODE HERE
+}
+
+/// Parse a full config string into a Config struct
+/// The input is multi-line: "host=localhost\nport=8080\ndebug=true"
+/// Use try/recover and ? for clean error handling
+///
+///   parse_config("host=localhost\nport=8080\ndebug=true")
+///   → Ok(Config { host: "localhost", port: 8080, debug: true })
+fn parse_config(text: string) -> Result<Config, string> {
+    // HINT: split lines, parse each, build Config
+    // YOUR CODE HERE
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    // Test parse_line
+    assert(parse_line("key=value").is_ok())
+    assert(parse_line("invalid").is_err())
+
+    // Test parse_port
+    assert_eq(parse_port("8080"), Ok(8080))
+    assert(parse_port("abc").is_err())
+    assert(parse_port("99999").is_err())
+
+    // Test parse_config — valid
+    let valid = "host=localhost\nport=8080\ndebug=true"
+    let config = parse_config(valid).unwrap()
+    assert_eq(config.host, "localhost")
+    assert_eq(config.port, 8080)
+    assert_eq(config.debug, true)
+
+    // Test parse_config — invalid port
+    let bad_port = "host=localhost\nport=abc\ndebug=false"
+    assert(parse_config(bad_port).is_err())
+
+    // Test parse_config — missing field
+    let missing = "host=localhost\nport=8080"
+    assert(parse_config(missing).is_err())
+
+    print("✓ All tests passed!")
+}
+
+main()

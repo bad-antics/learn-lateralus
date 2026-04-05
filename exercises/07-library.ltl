@@ -1,0 +1,106 @@
+// Exercise 7: Mini Library
+// ──────────────────────────────────────────────
+// Practice: modules, imports, pub, project structure
+//
+// This exercise simulates a multi-module project in a single file.
+// In a real project, each section would be its own .ltl file.
+//
+// TODO: Implement the library, then run:
+//   lateralus run exercises/07-library.ltl
+
+// ─── "Module": Book ─────────────────────────────────────
+
+pub struct Book {
+    pub title: string,
+    pub author: string,
+    pub year: int,
+    pub checked_out: bool,
+}
+
+impl Book {
+    /// Create a new book (not checked out)
+    pub fn new(title: string, author: string, year: int) -> Book {
+        // YOUR CODE HERE
+    }
+
+    /// Display string: "Title by Author (Year)"
+    pub fn display(self) -> string {
+        // YOUR CODE HERE
+    }
+}
+
+// ─── "Module": Library ──────────────────────────────────
+
+pub struct Library {
+    pub name: string,
+    pub books: [Book],
+}
+
+impl Library {
+    pub fn new(name: string) -> Library {
+        Library { name, books: [] }
+    }
+
+    /// Add a book to the library
+    pub fn add(mut self, book: Book) {
+        // YOUR CODE HERE
+    }
+
+    /// Search books by partial title match (case-insensitive)
+    /// Return matching books as an array
+    pub fn search(self, query: string) -> [Book] {
+        // HINT: use |> filter with .lower().contains()
+        // YOUR CODE HERE
+    }
+
+    /// Check out a book by title. Returns Ok if found and available, Err otherwise
+    pub fn checkout(mut self, title: string) -> Result<Book, string> {
+        // YOUR CODE HERE
+    }
+
+    /// Return a book by title
+    pub fn return_book(mut self, title: string) -> Result<none, string> {
+        // YOUR CODE HERE
+    }
+
+    /// List all available (not checked out) books
+    pub fn available(self) -> [Book] {
+        // YOUR CODE HERE
+    }
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    mut lib = Library::new("City Library")
+
+    // Add books
+    lib.add(Book::new("The Rust Book", "Steve Klabnik", 2019))
+    lib.add(Book::new("Crafting Interpreters", "Robert Nystrom", 2021))
+    lib.add(Book::new("The Art of Code", "Dylan Beattie", 2022))
+
+    // Search
+    let results = lib.search("the")
+    print("Search 'the': ${results.len()} results")
+    assert_eq(results.len(), 2)   // "The Rust Book" and "The Art of Code"
+
+    // Checkout
+    let book = lib.checkout("Crafting Interpreters").unwrap()
+    print("Checked out: ${book.display()}")
+
+    // Available
+    let avail = lib.available()
+    print("Available: ${avail.len()} books")
+    assert_eq(avail.len(), 2)
+
+    // Can't checkout twice
+    assert(lib.checkout("Crafting Interpreters").is_err())
+
+    // Return
+    lib.return_book("Crafting Interpreters").unwrap()
+    assert_eq(lib.available().len(), 3)
+
+    print("✓ All tests passed!")
+}
+
+main()

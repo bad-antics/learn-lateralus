@@ -1,0 +1,65 @@
+// Solution 4: Shape Calculator
+
+enum Shape {
+    Circle(float),
+    Rectangle(float, float),
+    Triangle(float, float),
+}
+
+impl Shape {
+    fn area(self) -> float {
+        match self {
+            Shape::Circle(r)       => 3.14159265 * r * r,
+            Shape::Rectangle(w, h) => w * h,
+            Shape::Triangle(b, h)  => 0.5 * b * h,
+        }
+    }
+
+    fn perimeter(self) -> float {
+        match self {
+            Shape::Circle(r)       => 2.0 * 3.14159265 * r,
+            Shape::Rectangle(w, h) => 2.0 * (w + h),
+            Shape::Triangle(b, h)  => {
+                let side = (b * b / 4.0 + h * h).sqrt()
+                b + 2.0 * side
+            },
+        }
+    }
+
+    fn describe(self) -> string {
+        match self {
+            Shape::Circle(r)       => "circle with radius ${r}",
+            Shape::Rectangle(w, h) => "${w}×${h} rectangle",
+            Shape::Triangle(b, h)  => "triangle (base ${b}, height ${h})",
+        }
+    }
+}
+
+fn main() {
+    let shapes = [
+        Shape::Circle(5.0),
+        Shape::Rectangle(3.0, 4.0),
+        Shape::Triangle(6.0, 4.0),
+    ]
+
+    for shape in shapes {
+        print("${shape.describe()}")
+        print("  Area:      ${shape.area():.2}")
+        print("  Perimeter: ${shape.perimeter():.2}")
+        print("")
+    }
+
+    assert_eq(Shape::Circle(1.0).area().round(4), 3.1416)
+    assert_eq(Shape::Rectangle(3.0, 4.0).area(), 12.0)
+    assert_eq(Shape::Triangle(6.0, 4.0).area(), 12.0)
+
+    let largest = shapes
+        |> sort_by(s => s.area(), :desc)
+        |> first()
+
+    print("Largest: ${largest.describe()}")
+
+    print("✓ All tests passed!")
+}
+
+main()

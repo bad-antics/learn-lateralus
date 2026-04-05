@@ -1,0 +1,85 @@
+// Solution 8: CLI Tool
+
+let NOTES_FILE = "notes.txt"
+
+fn load_notes() -> [string] {
+    try {
+        fs::read(NOTES_FILE)?
+            |> split("\n")
+            |> filter(line => !line.is_empty())
+    } recover _ {
+        []
+    }
+}
+
+fn save_notes(notes: [string]) -> Result<none, string> {
+    let content = notes |> join("\n")
+    fs::write(NOTES_FILE, content)
+}
+
+fn cmd_add(text: string) -> Result<none, string> {
+    mut notes = load_notes()
+    notes.push(text)
+    save_notes(notes)
+}
+
+fn cmd_list() {
+    let notes = load_notes()
+    if notes.is_empty() {
+        print("No notes yet. Add one with: notes add \"your note\"")
+        return
+    }
+    notes
+        |> enumerate()
+        |> each((i, note) => print("  ${i + 1}. ${note}"))
+}
+
+fn cmd_search(query: string) {
+    let results = load_notes()
+        |> filter(note => note.lower().contains(query.lower()))
+
+    if results.is_empty() {
+        print("No notes matching '${query}'")
+        return
+    }
+
+    print("Found ${results.len()} match(es):")
+    results |> each(note => print("  • ${note}"))
+}
+
+fn cmd_clear() -> Result<none, string> {
+    save_notes([])
+}
+
+fn main() {
+    let args = env::args()
+
+    match args[1..] {
+        ["add", ...rest] => {
+            let text = rest.join(" ")
+            match cmd_add(text) {
+                Ok(_)  => print("✓ Added: ${text}"),
+                Err(e) => print("Error: ${e}")
+            }
+        },
+        ["list"]            => cmd_list(),
+        ["search", query]   => cmd_search(query),
+        ["clear"]           => {
+            match cmd_clear() {
+                Ok(_)  => print("✓ All notes cleared"),
+                Err(e) => print("Error: ${e}")
+            }
+        },
+        _ => {
+            print("📝 Notes — A simple CLI note tool")
+            print("")
+            print("Usage:")
+            print("  notes add <text>      Add a note")
+            print("  notes list            List all notes")
+            print("  notes search <word>   Search notes")
+            print("  notes clear           Delete all notes")
+        }
+    }
+}
+
+main()

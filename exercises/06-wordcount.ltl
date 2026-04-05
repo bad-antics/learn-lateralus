@@ -1,0 +1,73 @@
+// Exercise 6: Word Counter
+// ──────────────────────────────────────────────
+// Practice: maps, closures, pipelines, sorting
+//
+// Build a word frequency counter using pipelines.
+//
+// TODO: Implement the functions, then run:
+//   lateralus run exercises/06-wordcount.ltl
+
+/// Count the frequency of each word in the text (case-insensitive)
+/// Returns a map of word → count
+///
+///   count_words("the cat and the dog") → { "the": 2, "cat": 1, "and": 1, "dog": 1 }
+fn count_words(text: string) -> {string: int} {
+    // HINT: split → lower → reduce into a map
+    // YOUR CODE HERE
+}
+
+/// Return the top N most frequent words, sorted by count (descending)
+///
+///   top_words(counts, 3) → [("the", 5), ("and", 3), ("a", 2)]
+fn top_words(counts: {string: int}, n: int) -> [(string, int)] {
+    // HINT: entries() |> sort_by |> take
+    // YOUR CODE HERE
+}
+
+/// Remove common stop words from a word list
+///
+///   remove_stops(["the", "cat", "is", "big"]) → ["cat", "big"]
+fn remove_stops(words: [string]) -> [string] {
+    let stops = ["the", "a", "an", "is", "it", "in", "on", "at", "to", "and", "or", "of"]
+    // YOUR CODE HERE
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    let text = "the quick brown fox jumps over the lazy dog and the fox"
+
+    // Test count_words
+    let counts = count_words(text)
+    print("Word counts: ${counts}")
+    assert_eq(counts["the"], 3)
+    assert_eq(counts["fox"], 2)
+
+    // Test top_words
+    let top = top_words(counts, 3)
+    print("Top 3: ${top}")
+    assert_eq(top[0].0, "the")
+    assert_eq(top[0].1, 3)
+
+    // Test remove_stops
+    let words = ["the", "quick", "brown", "fox", "is", "a", "hero"]
+    let filtered = remove_stops(words)
+    print("Filtered: ${filtered}")
+    assert(!filtered.contains("the"))
+    assert(!filtered.contains("is"))
+    assert(filtered.contains("fox"))
+    assert(filtered.contains("hero"))
+
+    // Bonus: combine everything in a pipeline
+    let report = text
+        |> count_words()
+        |> entries()
+        |> filter((word, _) => !["the", "a", "and"].contains(word))
+        |> sort_by((_, count) => count, :desc)
+        |> take(5)
+        |> each((word, count) => print("  ${word}: ${count}"))
+
+    print("✓ All tests passed!")
+}
+
+main()

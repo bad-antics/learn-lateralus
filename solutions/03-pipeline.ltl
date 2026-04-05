@@ -1,0 +1,51 @@
+// Solution 3: Data Pipeline
+
+struct Student {
+    name: string,
+    scores: [int],
+}
+
+fn average(scores: [int]) -> float {
+    scores |> sum() |> to_float() |> divide(scores.len().to_float())
+}
+
+fn honor_roll(students: [Student], threshold: float) -> [string] {
+    students
+        |> filter(s => average(s.scores) >= threshold)
+        |> map(s => s.name)
+        |> sort()
+}
+
+fn title_case(sentence: string) -> string {
+    sentence
+        |> split(" ")
+        |> map(word => {
+            let first = word[0].upper()
+            let rest = word[1..].lower()
+            "${first}${rest}"
+        })
+        |> join(" ")
+}
+
+fn main() {
+    assert_eq(average([90, 80, 70]), 80.0)
+    assert_eq(average([100]), 100.0)
+
+    let students = [
+        Student { name: "Alice",   scores: [95, 88, 92] },
+        Student { name: "Bob",     scores: [70, 65, 72] },
+        Student { name: "Charlie", scores: [88, 90, 85] },
+        Student { name: "Diana",   scores: [80, 78, 82] },
+    ]
+    let honors = honor_roll(students, 85.0)
+    print("Honor roll: ${honors}")
+    assert_eq(honors, ["Alice", "Charlie"])
+
+    let result = title_case("hello world foo")
+    print("Title: ${result}")
+    assert_eq(result, "Hello World Foo")
+
+    print("✓ All tests passed!")
+}
+
+main()

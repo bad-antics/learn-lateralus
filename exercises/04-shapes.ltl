@@ -1,0 +1,73 @@
+// Exercise 4: Shape Calculator
+// ──────────────────────────────────────────────
+// Practice: enums with data, structs, pattern matching, impl blocks
+//
+// TODO: Implement the Shape enum and methods, then run:
+//   lateralus run exercises/04-shapes.ltl
+
+/// Define a Shape enum with these variants:
+///   Circle(radius: float)
+///   Rectangle(width: float, height: float)
+///   Triangle(base: float, height: float)
+// YOUR CODE HERE — define enum Shape
+
+/// Implement these methods on Shape:
+
+impl Shape {
+    /// Calculate the area
+    ///   Circle: π × r²
+    ///   Rectangle: w × h
+    ///   Triangle: 0.5 × b × h
+    fn area(self) -> float {
+        // YOUR CODE HERE
+    }
+
+    /// Calculate the perimeter
+    ///   Circle: 2 × π × r
+    ///   Rectangle: 2 × (w + h)
+    ///   Triangle: base + 2 sides (assume isoceles: side = sqrt(base²/4 + h²))
+    fn perimeter(self) -> float {
+        // YOUR CODE HERE
+    }
+
+    /// Return a human-readable description
+    ///   Circle(5.0) → "circle with radius 5"
+    ///   Rectangle(3.0, 4.0) → "3×4 rectangle"
+    ///   Triangle(6.0, 4.0) → "triangle (base 6, height 4)"
+    fn describe(self) -> string {
+        // YOUR CODE HERE
+    }
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    let shapes = [
+        Shape::Circle(5.0),
+        Shape::Rectangle(3.0, 4.0),
+        Shape::Triangle(6.0, 4.0),
+    ]
+
+    for shape in shapes {
+        print("${shape.describe()}")
+        print("  Area:      ${shape.area():.2}")
+        print("  Perimeter: ${shape.perimeter():.2}")
+        print("")
+    }
+
+    // Verify areas
+    assert_eq(Shape::Circle(1.0).area().round(4), 3.1416)
+    assert_eq(Shape::Rectangle(3.0, 4.0).area(), 12.0)
+    assert_eq(Shape::Triangle(6.0, 4.0).area(), 12.0)
+
+    // Bonus: find the shape with the largest area using a pipeline
+    let largest = shapes
+        |> sort_by(s => s.area(), :desc)
+        |> first()
+
+    print("Largest: ${largest.describe()}")
+
+    print("✓ All tests passed!")
+}
+
+main()

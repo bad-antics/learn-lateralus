@@ -1,0 +1,47 @@
+// Exercise 1: Hello Pipeline
+// ──────────────────────────────────────────────
+// Practice: variables, functions, print, string interpolation
+//
+// TODO: Complete the functions below, then run:
+//   lateralus run exercises/01-hello.ltl
+
+/// 1. Create a function that returns a greeting string
+///    greet("Alice") → "Hello, Alice! Welcome to Lateralus."
+fn greet(name: string) -> string {
+    // YOUR CODE HERE
+}
+
+/// 2. Create a function that calculates the area of a rectangle
+///    area(3.0, 4.0) → 12.0
+fn area(width: float, height: float) -> float {
+    // YOUR CODE HERE
+}
+
+/// 3. Create a function that returns the longer of two strings
+///    longer("hi", "hello") → "hello"
+fn longer(a: string, b: string) -> string {
+    // YOUR CODE HERE
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    // Test greet
+    let msg = greet("World")
+    print(msg)
+    assert_eq(msg, "Hello, World! Welcome to Lateralus.")
+
+    // Test area
+    let a = area(5.0, 3.0)
+    print("Area: ${a}")
+    assert_eq(a, 15.0)
+
+    // Test longer
+    let l = longer("hi", "hello")
+    print("Longer: ${l}")
+    assert_eq(l, "hello")
+
+    print("✓ All tests passed!")
+}
+
+main()

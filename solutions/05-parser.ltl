@@ -1,0 +1,72 @@
+// Solution 5: Safe Parser
+
+struct Config {
+    host: string,
+    port: int,
+    debug: bool,
+}
+
+fn parse_line(line: string) -> Result<(string, string), string> {
+    match line.split_once("=") {
+        Some((key, value)) => Ok((key.trim(), value.trim())),
+        None => Err("missing '=' in line: ${line}")
+    }
+}
+
+fn parse_port(s: string) -> Result<int, string> {
+    match s.to_int() {
+        Some(n) if n >= 1 && n <= 65535 => Ok(n),
+        Some(n) => Err("port out of range: ${n}"),
+        None    => Err("invalid port number: ${s}")
+    }
+}
+
+fn parse_config(text: string) -> Result<Config, string> {
+    try {
+        let pairs = text
+            |> split("\n")
+            |> filter(line => !line.is_empty())
+            |> map(line => parse_line(line)?)
+            |> collect_map()
+
+        let host = pairs.get("host")
+            |> ok_or("missing field: host")?
+
+        let port = pairs.get("port")
+            |> ok_or("missing field: port")?
+            |> parse_port()?
+
+        let debug = pairs.get("debug")
+            |> ok_or("missing field: debug")?
+            |> to_bool()?
+
+        Ok(Config { host, port, debug })
+    } recover err {
+        Err("config parse error: ${err}")
+    }
+}
+
+fn main() {
+    assert(parse_line("key=value").is_ok())
+    assert(parse_line("invalid").is_err())
+
+    assert_eq(parse_port("8080"), Ok(8080))
+    assert(parse_port("abc").is_err())
+    assert(parse_port("99999").is_err())
+
+    let valid = "host=localhost\nport=8080\ndebug=true"
+    let config = parse_config(valid).unwrap()
+    assert_eq(config.host, "localhost")
+    assert_eq(config.port, 8080)
+    assert_eq(config.debug, true)
+
+    let bad_port = "host=localhost\nport=abc\ndebug=false"
+    assert(parse_config(bad_port).is_err())
+
+    let missing = "host=localhost\nport=8080"
+    assert(parse_config(missing).is_err())
+
+    print("✓ All tests passed!")
+}
+
+main()

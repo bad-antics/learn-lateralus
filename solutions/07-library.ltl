@@ -1,0 +1,92 @@
+// Solution 7: Mini Library
+
+pub struct Book {
+    pub title: string,
+    pub author: string,
+    pub year: int,
+    pub checked_out: bool,
+}
+
+impl Book {
+    pub fn new(title: string, author: string, year: int) -> Book {
+        Book { title, author, year, checked_out: false }
+    }
+
+    pub fn display(self) -> string {
+        "${self.title} by ${self.author} (${self.year})"
+    }
+}
+
+pub struct Library {
+    pub name: string,
+    pub books: [Book],
+}
+
+impl Library {
+    pub fn new(name: string) -> Library {
+        Library { name, books: [] }
+    }
+
+    pub fn add(mut self, book: Book) {
+        self.books.push(book)
+    }
+
+    pub fn search(self, query: string) -> [Book] {
+        self.books
+            |> filter(b => b.title.lower().contains(query.lower()))
+    }
+
+    pub fn checkout(mut self, title: string) -> Result<Book, string> {
+        match self.books |> find_index(b => b.title == title) {
+            Some(i) if !self.books[i].checked_out => {
+                self.books[i].checked_out = true
+                Ok(self.books[i])
+            },
+            Some(_) => Err("'${title}' is already checked out"),
+            None    => Err("'${title}' not found in library"),
+        }
+    }
+
+    pub fn return_book(mut self, title: string) -> Result<none, string> {
+        match self.books |> find_index(b => b.title == title) {
+            Some(i) if self.books[i].checked_out => {
+                self.books[i].checked_out = false
+                Ok(none)
+            },
+            Some(_) => Err("'${title}' was not checked out"),
+            None    => Err("'${title}' not found in library"),
+        }
+    }
+
+    pub fn available(self) -> [Book] {
+        self.books |> filter(b => !b.checked_out)
+    }
+}
+
+fn main() {
+    mut lib = Library::new("City Library")
+
+    lib.add(Book::new("The Rust Book", "Steve Klabnik", 2019))
+    lib.add(Book::new("Crafting Interpreters", "Robert Nystrom", 2021))
+    lib.add(Book::new("The Art of Code", "Dylan Beattie", 2022))
+
+    let results = lib.search("the")
+    print("Search 'the': ${results.len()} results")
+    assert_eq(results.len(), 2)
+
+    let book = lib.checkout("Crafting Interpreters").unwrap()
+    print("Checked out: ${book.display()}")
+
+    let avail = lib.available()
+    print("Available: ${avail.len()} books")
+    assert_eq(avail.len(), 2)
+
+    assert(lib.checkout("Crafting Interpreters").is_err())
+
+    lib.return_book("Crafting Interpreters").unwrap()
+    assert_eq(lib.available().len(), 3)
+
+    print("✓ All tests passed!")
+}
+
+main()

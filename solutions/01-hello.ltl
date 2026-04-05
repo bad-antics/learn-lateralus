@@ -1,0 +1,31 @@
+// Solution 1: Hello Pipeline
+
+fn greet(name: string) -> string {
+    "Hello, ${name}! Welcome to Lateralus."
+}
+
+fn area(width: float, height: float) -> float {
+    width * height
+}
+
+fn longer(a: string, b: string) -> string {
+    if a.len() >= b.len() { a } else { b }
+}
+
+fn main() {
+    let msg = greet("World")
+    print(msg)
+    assert_eq(msg, "Hello, World! Welcome to Lateralus.")
+
+    let a = area(5.0, 3.0)
+    print("Area: ${a}")
+    assert_eq(a, 15.0)
+
+    let l = longer("hi", "hello")
+    print("Longer: ${l}")
+    assert_eq(l, "hello")
+
+    print("✓ All tests passed!")
+}
+
+main()

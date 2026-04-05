@@ -1,0 +1,38 @@
+// Exercise 2: FizzBuzz
+// ──────────────────────────────────────────────
+// Practice: match, loops, modulo
+//
+// Rules:
+//   - Divisible by 3 → "Fizz"
+//   - Divisible by 5 → "Buzz"
+//   - Divisible by both → "FizzBuzz"
+//   - Otherwise → the number as string
+//
+// TODO: Implement fizzbuzz, then run:
+//   lateralus run exercises/02-fizzbuzz.ltl
+
+/// Return the FizzBuzz string for a number
+fn fizzbuzz(n: int) -> string {
+    // HINT: Use match with tuples: (n % 3, n % 5)
+    // YOUR CODE HERE
+}
+
+// ─── Test your solution ─────────────────────────────────
+
+fn main() {
+    // Print 1 to 20
+    for i in 1..=20 {
+        print("${i}: ${fizzbuzz(i)}")
+    }
+
+    // Verify
+    assert_eq(fizzbuzz(1), "1")
+    assert_eq(fizzbuzz(3), "Fizz")
+    assert_eq(fizzbuzz(5), "Buzz")
+    assert_eq(fizzbuzz(15), "FizzBuzz")
+    assert_eq(fizzbuzz(7), "7")
+
+    print("✓ All tests passed!")
+}
+
+main()

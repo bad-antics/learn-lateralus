@@ -1,0 +1,62 @@
+// Exercise 3: Data Pipeline
+// ──────────────────────────────────────────────
+// Practice: |> operator, filter, map, reduce
+//
+// TODO: Use pipelines to transform data, then run:
+//   lateralus run exercises/03-pipeline.ltl
+
+struct Student {
+    name: string,
+    scores: [int],
+}
+
+/// 1. Calculate a student's average score
+///    average([90, 80, 70]) → 80.0
+fn average(scores: [int]) -> float {
+    // HINT: use sum() and len()
+    // YOUR CODE HERE
+}
+
+/// 2. Given a list of students, return the names of those
+///    with an average score above the threshold, sorted alphabetically
+///    
+///    honor_roll(students, 85) → ["Alice", "Charlie"]
+fn honor_roll(students: [Student], threshold: float) -> [string] {
+    // HINT: use |> filter |> map |> sort
+    // YOUR CODE HERE
+}
+
+/// 3. Transform a sentence into a "title case" pipeline:
+///    title_case("hello world foo") → "Hello World Foo"
+fn title_case(sentence: string) -> string {
+    // HINT: split → map(capitalize each word) → join
+    // YOUR CODE HERE
+}
+
+// ─── Test your solutions ────────────────────────────────
+
+fn main() {
+    // Test average
+    assert_eq(average([90, 80, 70]), 80.0)
+    assert_eq(average([100]), 100.0)
+
+    // Test honor_roll
+    let students = [
+        Student { name: "Alice",   scores: [95, 88, 92] },
+        Student { name: "Bob",     scores: [70, 65, 72] },
+        Student { name: "Charlie", scores: [88, 90, 85] },
+        Student { name: "Diana",   scores: [80, 78, 82] },
+    ]
+    let honors = honor_roll(students, 85.0)
+    print("Honor roll: ${honors}")
+    assert_eq(honors, ["Alice", "Charlie"])
+
+    // Test title_case
+    let result = title_case("hello world foo")
+    print("Title: ${result}")
+    assert_eq(result, "Hello World Foo")
+
+    print("✓ All tests passed!")
+}
+
+main()
