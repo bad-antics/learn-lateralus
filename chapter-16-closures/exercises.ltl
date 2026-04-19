@@ -1,0 +1,41 @@
+// chapter-16 exercises
+// 1. Write `partial` — fix the first argument of a 2-arg function
+fn partial<A: Clone, B, C>(f: fn(A, B) -> C, a: A) -> fn(B) -> C {
+    |b| f(a.clone(), b)
+}
+
+// 2. Write `flip` — swap the arguments of a 2-arg function
+fn flip<A, B, C>(f: fn(A, B) -> C) -> fn(B, A) -> C {
+    |b, a| f(a, b)
+}
+
+// 3. Write `pipe` — left-to-right function composition for a list of fns
+fn pipe(fns: [fn(int) -> int]) -> fn(int) -> int {
+    |x| fns |> fold(x, |acc, f| f(acc))
+}
+
+// 4. Write `curry` — convert a 2-arg function to a chain of 1-arg closures
+fn curry<A: Clone, B: Clone, C>(f: fn(A, B) -> C) -> fn(A) -> fn(B) -> C {
+    |a: A| {
+        let a2 = a.clone()
+        |b: B| f(a2.clone(), b)
+    }
+}
+
+fn main() {
+    let mul = |a: int, b: int| a * b
+    let double = partial(mul, 2)
+    assert(double(7) == 14)
+
+    let div = |a: int, b: int| a / b
+    let inv_div = flip(div)
+    assert(inv_div(2, 10) == 5)
+
+    let pipeline = pipe([|x| x + 1, |x| x * 3, |x| x - 2])
+    assert(pipeline(4) == 13)
+
+    let add = curry(|a: int, b: int| a + b)
+    assert(add(3)(4) == 7)
+
+    print("chapter 16 exercises — all passed ✓")
+}
