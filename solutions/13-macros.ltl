@@ -1,0 +1,47 @@
+// Solution 13 — Macros
+
+macro hashmap!{ $($k:expr => $v:expr),* } {
+    {
+        mut _m = {}
+        $( _m[$k] = $v; )*
+        _m
+    }
+}
+
+macro assert_close!($a:expr, $b:expr, $eps:expr) {
+    {
+        let diff = ($a - $b).abs()
+        assert!(diff <= $eps, "Expected |${$a} - ${$b}| <= ${$eps}, got ${diff}")
+    }
+}
+
+macro retry!($n:expr, $body:block) {
+    {
+        mut _result = err("no attempts")
+        for _ in range(0, $n) {
+            _result = $body
+            if _result.is_ok() { break }
+        }
+        _result
+    }
+}
+
+fn main() {
+    let m = hashmap!{ "foo" => 1, "bar" => 2, "baz" => 3 }
+    assert_eq(m["foo"], 1)
+    assert_eq(m.len(), 3)
+
+    assert_close!(0.1 + 0.2, 0.3, 1e-10)
+
+    mut attempts = 0
+    let result = retry!(3, {
+        attempts += 1
+        if attempts < 3 { err("not yet") } else { ok(42) }
+    })
+    assert_eq(result, ok(42))
+    assert_eq(attempts, 3)
+
+    print("Exercise 13 complete!")
+}
+
+main()
