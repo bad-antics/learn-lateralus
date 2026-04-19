@@ -1,0 +1,49 @@
+// chapter-18 — Building a semaphore from primitives
+use std.sync.{Arc, Mutex, Condvar}
+use std.task.{spawn, join_all}
+
+struct Semaphore {
+    count: Arc<Mutex<int>>,
+    cond:  Arc<Condvar>,
+    max:   int,
+}
+
+impl Semaphore {
+    fn new(max: int) -> Semaphore {
+        Semaphore { count: Arc.new(Mutex.new(max)), cond: Arc.new(Condvar.new()), max }
+    }
+
+    async fn acquire(self) {
+        let mut lock = self.count.lock().await
+        while *lock <= 0 {
+            lock = self.cond.wait(lock).await
+        }
+        *lock -= 1
+    }
+
+    async fn release(self) {
+        let mut lock = self.count.lock().await
+        *lock += 1
+        self.cond.notify_one()
+    }
+}
+
+async fn main() {
+    let sem  = Arc.new(Semaphore.new(3))
+    let done = Arc.new(Mutex.new(0))
+    let tasks: [Task<()>] = range(0, 9) |> map(|i| {
+        let s = sem.clone()
+        let d = done.clone()
+        spawn(async {
+            s.acquire().await
+            // critical section
+            let mut lock = d.lock().await
+            *lock += 1
+            drop(lock)
+            s.release().await
+        })
+    }) |> collect()
+    join_all(tasks).await
+    assert(*done.lock().await == 9)
+    print("semaphore — 9 tasks completed with max-3 concurrency ✓")
+}
