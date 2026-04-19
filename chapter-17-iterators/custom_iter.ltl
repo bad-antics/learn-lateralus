@@ -1,0 +1,52 @@
+// chapter-17 — Implementing a custom iterator
+
+trait Iterator<Item> {
+    fn next(mut self) -> Item?
+}
+
+/// Fibonacci number iterator
+struct FibIter { a: int, b: int }
+
+impl FibIter {
+    fn new() -> FibIter { FibIter { a: 0, b: 1 } }
+}
+
+impl Iterator<int> for FibIter {
+    fn next(mut self) -> int? {
+        let val = self.a
+        let next_b = self.a + self.b
+        self.a = self.b
+        self.b = next_b
+        some(val)
+    }
+}
+
+/// Range iterator (start..end step)
+struct StepRange { current: int, end: int, step: int }
+
+impl StepRange {
+    fn new(start: int, end: int, step: int) -> StepRange {
+        StepRange { current: start, end, step }
+    }
+}
+
+impl Iterator<int> for StepRange {
+    fn next(mut self) -> int? {
+        if self.current >= self.end { none }
+        else {
+            let v = self.current
+            self.current += self.step
+            some(v)
+        }
+    }
+}
+
+fn main() {
+    let fibs: [int] = FibIter.new() |> take(10) |> collect()
+    assert(fibs == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34])
+
+    let evens: [int] = StepRange.new(0, 20, 2) |> collect()
+    assert(evens == [0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+
+    print("chapter 17 custom iter — all assertions passed ✓")
+}
