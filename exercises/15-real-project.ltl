@@ -1,0 +1,81 @@
+// Exercise 15 — Real Project: Mini Task Manager
+// Run: lateralus run exercises/15-real-project.ltl
+
+// Implement an in-memory task manager (no SQLite needed for this exercise)
+
+enum Status { Todo, InProgress, Done }
+
+struct Task {
+    id:     int,
+    title:  string,
+    status: Status,
+    tags:   [string],
+}
+
+struct TaskManager {
+    tasks:   [Task],
+    next_id: int,
+}
+
+impl TaskManager {
+    fn new() -> TaskManager {
+        TaskManager { tasks: [], next_id: 1 }
+    }
+
+    // 1. add(title, tags) -> Task
+    fn add(mut self, title: string, tags: [string]) -> Task {
+        // TODO
+        Task { id: 0, title, status: Status.Todo, tags }
+    }
+
+    // 2. list(filter_status) -> [Task]  (none = all)
+    fn list(self, filter_status: Status?) -> [Task] {
+        // TODO
+        []
+    }
+
+    // 3. update_status(id, new_status) -> Result<(), string>
+    fn update_status(mut self, id: int, new_status: Status) -> Result<(), string> {
+        // TODO
+        ok(())
+    }
+
+    // 4. delete(id) -> Result<(), string>
+    fn delete(mut self, id: int) -> Result<(), string> {
+        // TODO
+        ok(())
+    }
+
+    // 5. search(query) -> [Task]  (match title or tags)
+    fn search(self, query: string) -> [Task] {
+        // TODO
+        []
+    }
+}
+
+fn main() {
+    mut tm = TaskManager.new()
+
+    let t1 = tm.add("Write chapter 15", ["writing", "docs"])
+    let t2 = tm.add("Fix bug #42",      ["bug"])
+    let t3 = tm.add("Add tests",        ["testing"])
+
+    assert_eq(tm.list(none).len(), 3)
+
+    tm.update_status(t1.id, Status.Done).unwrap()
+    tm.update_status(t2.id, Status.InProgress).unwrap()
+
+    let done = tm.list(some(Status.Done))
+    assert_eq(done.len(), 1)
+    assert_eq(done[0].title, "Write chapter 15")
+
+    let found = tm.search("bug")
+    assert_eq(found.len(), 1)
+
+    tm.delete(t3.id).unwrap()
+    assert_eq(tm.list(none).len(), 2)
+
+    print("Exercise 15 complete!")
+}
+
+main()
