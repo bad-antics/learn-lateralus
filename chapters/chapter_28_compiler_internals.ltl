@@ -1,0 +1,279 @@
+// Chapter 28 — Lateralus Compiler Internals
+// How the Lateralus compiler works: lexing, parsing, type checking, codegen.
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 1: Compilation Pipeline Overview
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Source → Tokens → AST → HIR → MIR → LLVM IR → Machine Code
+//
+// 1. Lexer:    Source code → Token stream
+// 2. Parser:   Tokens → Abstract Syntax Tree (AST)
+// 3. Resolver: Name resolution, macro expansion
+// 4. Typechk:  Type inference and checking
+// 5. HIR:      High-level IR (desugared)
+// 6. MIR:      Mid-level IR (control flow, borrow checking)
+// 7. Codegen:  MIR → LLVM IR → native code
+
+// ── Mini type system ─────────────────────────────────────────────────────────
+use std.collections.HashMap
+
+type TypeId = u32
+
+enum Type {
+    Int(u8),        // i8, i16, i32, i64
+    Uint(u8),       // u8, u16, u32, u64
+    Float(u8),      // f32, f64
+    Bool,
+    Char,
+    Str,
+    Unit,
+    Array(Box<Type>, Option<usize>),
+    Tuple([Type]),
+    Function { params: [Type], ret: Box<Type> },
+    Struct { name: string, fields: [(string, Type)] },
+    Enum { name: string, variants: [(string, Option<Type>)] },
+    Generic { name: string, bounds: [string] },
+    Reference { inner: Box<Type>, mutable: bool, lifetime: Option<string> },
+    TypeVar(TypeId),  // unification variable
+    Never,
+}
+
+// ── Type inference engine (Hindley-Milner) ───────────────────────────────────
+struct TypeEngine {
+    substitutions: HashMap<TypeId, Type>,
+    next_var: TypeId,
+    constraints: [(Type, Type)],
+    errors: [TypeError],
+}
+
+struct TypeError {
+    message: string,
+    span: Span,
+}
+
+struct Span { start: u32, end: u32, file: string }
+
+impl TypeEngine {
+    fn new() -> TypeEngine {
+        TypeEngine { substitutions: HashMap.new(), next_var: 0, constraints: [], errors: [] }
+    }
+
+    fn fresh_var(mut self) -> Type {
+        let id = self.next_var
+        self.next_var += 1
+        Type.TypeVar(id)
+    }
+
+    fn unify(mut self, a: &Type, b: &Type) -> bool {
+        let a = self.resolve(a)
+        let b = self.resolve(b)
+
+        match (&a, &b) {
+            (Type.TypeVar(id), _) => { self.substitutions.insert(*id, b.clone()); true }
+            (_, Type.TypeVar(id)) => { self.substitutions.insert(*id, a.clone()); true }
+            (Type.Int(w1), Type.Int(w2)) => w1 == w2,
+            (Type.Uint(w1), Type.Uint(w2)) => w1 == w2,
+            (Type.Float(w1), Type.Float(w2)) => w1 == w2,
+            (Type.Bool, Type.Bool) | (Type.Char, Type.Char) | (Type.Str, Type.Str) | (Type.Unit, Type.Unit) => true,
+            (Type.Array(t1, _), Type.Array(t2, _)) => self.unify(t1, t2),
+            (Type.Tuple(ts1), Type.Tuple(ts2)) if ts1.len() == ts2.len() => {
+                ts1.iter().zip(ts2.iter()).all(|(a, b)| self.unify(a, b))
+            }
+            (Type.Function { params: p1, ret: r1 }, Type.Function { params: p2, ret: r2 }) => {
+                p1.len() == p2.len()
+                    && p1.iter().zip(p2.iter()).all(|(a, b)| self.unify(a, b))
+                    && self.unify(r1, r2)
+            }
+            (Type.Reference { inner: i1, mutable: m1, .. }, Type.Reference { inner: i2, mutable: m2, .. }) => {
+                m1 == m2 && self.unify(i1, i2)
+            }
+            _ => {
+                self.errors.push(TypeError {
+                    message: format!("cannot unify {:?} with {:?}", a, b),
+                    span: Span { start: 0, end: 0, file: "".to_string() },
+                })
+                false
+            }
+        }
+    }
+
+    fn resolve(self, ty: &Type) -> Type {
+        match ty {
+            Type.TypeVar(id) => {
+                if let some(resolved) = self.substitutions.get(id) {
+                    self.resolve(resolved)
+                } else {
+                    ty.clone()
+                }
+            }
+            _ => ty.clone(),
+        }
+    }
+
+    fn add_constraint(mut self, a: Type, b: Type) {
+        self.constraints.push((a, b))
+    }
+
+    fn solve(mut self) -> bool {
+        let constraints = self.constraints.clone()
+        self.constraints.clear()
+        for (a, b) in constraints {
+            if !self.unify(&a, &b) { return false }
+        }
+        self.errors.is_empty()
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 2: Borrow Checker (simplified)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type VarId = u32
+
+enum BorrowKind { Shared, Mutable }
+
+struct Borrow {
+    var: VarId,
+    kind: BorrowKind,
+    region: Region,
+}
+
+struct Region {
+    start: u32,  // program point
+    end: u32,
+}
+
+impl Region {
+    fn overlaps(self, other: &Region) -> bool {
+        self.start < other.end && other.start < self.end
+    }
+}
+
+struct BorrowChecker {
+    active_borrows: [Borrow],
+    errors: [string],
+}
+
+impl BorrowChecker {
+    fn new() -> BorrowChecker { BorrowChecker { active_borrows: [], errors: [] } }
+
+    fn check_borrow(mut self, var: VarId, kind: BorrowKind, region: Region) -> bool {
+        for borrow in &self.active_borrows {
+            if borrow.var != var { continue }
+            if !borrow.region.overlaps(&region) { continue }
+
+            match (&borrow.kind, &kind) {
+                (BorrowKind.Shared, BorrowKind.Shared) => {} // OK: multiple shared borrows
+                (BorrowKind.Mutable, _) | (_, BorrowKind.Mutable) => {
+                    self.errors.push(format!("cannot borrow v{var} as {:?}: already borrowed as {:?}", kind, borrow.kind))
+                    return false
+                }
+            }
+        }
+        self.active_borrows.push(Borrow { var, kind, region })
+        true
+    }
+
+    fn expire_borrows(mut self, point: u32) {
+        self.active_borrows.retain(|b| b.region.end > point)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 3: MIR (Mid-level IR)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum MirOperand { Var(VarId), Const(i64), Ref(VarId, BorrowKind) }
+
+enum MirStatement {
+    Assign { dst: VarId, src: MirOperand },
+    BinaryOp { dst: VarId, op: string, lhs: MirOperand, rhs: MirOperand },
+    Call { dst: VarId, func: string, args: [MirOperand] },
+    Drop(VarId),
+}
+
+enum MirTerminator {
+    Goto(u32),
+    SwitchInt { operand: MirOperand, targets: [(i64, u32)], default: u32 },
+    Return,
+    Unreachable,
+}
+
+struct MirBlock {
+    id: u32,
+    stmts: [MirStatement],
+    terminator: MirTerminator,
+}
+
+struct MirFunction {
+    name: string,
+    args: [(VarId, Type)],
+    return_type: Type,
+    blocks: [MirBlock],
+    locals: [(VarId, Type)],
+}
+
+fn main() {
+    // Type inference
+    let mut engine = TypeEngine.new()
+
+    let t1 = engine.fresh_var()
+    let t2 = Type.Int(32)
+    assert(engine.unify(&t1, &t2))
+    let resolved = engine.resolve(&t1)
+    assert(matches!(resolved, Type.Int(32)))
+    print("Type unification: ?0 = i32 ✓")
+
+    // Function type
+    let fn_type = Type.Function {
+        params: [Type.Int(32), Type.Int(32)],
+        ret: Box.new(Type.Int(32)),
+    }
+    let t3 = engine.fresh_var()
+    engine.add_constraint(t3.clone(), fn_type)
+    assert(engine.solve())
+    print("Function type constraint ✓")
+
+    // Type mismatch
+    let mut engine2 = TypeEngine.new()
+    assert(!engine2.unify(&Type.Int(32), &Type.Bool))
+    assert(engine2.errors.len() > 0)
+    print("Type mismatch detected ✓")
+
+    // Tuple unification
+    let mut engine3 = TypeEngine.new()
+    let tv = engine3.fresh_var()
+    let tuple1 = Type.Tuple([tv.clone(), Type.Bool])
+    let tuple2 = Type.Tuple([Type.Int(64), Type.Bool])
+    assert(engine3.unify(&tuple1, &tuple2))
+    let resolved_tv = engine3.resolve(&tv)
+    assert(matches!(resolved_tv, Type.Int(64)))
+    print("Tuple inference: (?0, bool) = (i64, bool) → ?0 = i64 ✓")
+
+    // Borrow checker
+    let mut bc = BorrowChecker.new()
+    let shared1 = bc.check_borrow(1, BorrowKind.Shared, Region { start: 0, end: 10 })
+    assert(shared1, "first shared borrow should succeed")
+    let shared2 = bc.check_borrow(1, BorrowKind.Shared, Region { start: 5, end: 15 })
+    assert(shared2, "second shared borrow should succeed")
+    let mut_borrow = bc.check_borrow(1, BorrowKind.Mutable, Region { start: 8, end: 20 })
+    assert(!mut_borrow, "mutable borrow should fail during active shared borrows")
+    print("Borrow checker: shared+shared OK, shared+mut FAIL ✓")
+
+    // Expire and retry
+    bc.expire_borrows(15)
+    let mut_borrow2 = bc.check_borrow(1, BorrowKind.Mutable, Region { start: 16, end: 25 })
+    assert(mut_borrow2, "mutable borrow should succeed after shared borrows expire")
+    print("Borrow expiry ✓")
+
+    // Region overlap
+    let r1 = Region { start: 5, end: 10 }
+    let r2 = Region { start: 8, end: 15 }
+    let r3 = Region { start: 15, end: 20 }
+    assert(r1.overlaps(&r2), "5..10 overlaps 8..15")
+    assert(!r1.overlaps(&r3), "5..10 doesn't overlap 15..20")
+    print("Region overlap ✓")
+
+    print("Chapter 28 — Compiler Internals complete ✓")
+}
