@@ -1,0 +1,52 @@
+// chapter-19 — Generating C bindings with #[repr(C)]
+#[repr(C)]
+struct Point { x: f64, y: f64 }
+
+#[repr(C)]
+struct Matrix2x2 { m: [[f64; 2]; 2] }
+
+impl Matrix2x2 {
+    fn identity() -> Matrix2x2 {
+        Matrix2x2 { m: [[1.0, 0.0], [0.0, 1.0]] }
+    }
+
+    fn mul(self, other: Matrix2x2) -> Matrix2x2 {
+        let a = self.m
+        let b = other.m
+        Matrix2x2 {
+            m: [
+                [a[0][0]*b[0][0] + a[0][1]*b[1][0], a[0][0]*b[0][1] + a[0][1]*b[1][1]],
+                [a[1][0]*b[0][0] + a[1][1]*b[1][0], a[1][0]*b[0][1] + a[1][1]*b[1][1]],
+            ]
+        }
+    }
+}
+
+// C-compatible error type
+#[repr(C)]
+enum CResult { Ok = 0, Err = 1 }
+
+// C-exportable function signature
+#[no_mangle]
+pub extern "C" fn matrix_mul(
+    a: *const Matrix2x2,
+    b: *const Matrix2x2,
+    out: *mut Matrix2x2,
+) -> CResult {
+    unsafe {
+        if a.is_null() || b.is_null() || out.is_null() {
+            return CResult.Err
+        }
+        *out = (*a).mul(*b)
+        CResult.Ok
+    }
+}
+
+fn main() {
+    let id = Matrix2x2.identity()
+    let m2 = Matrix2x2 { m: [[2.0, 0.0], [0.0, 3.0]] }
+    let r  = id.mul(m2)
+    assert(r.m[0][0] == 2.0)
+    assert(r.m[1][1] == 3.0)
+    print("chapter 19 bindings — repr(C) structs work ✓")
+}
