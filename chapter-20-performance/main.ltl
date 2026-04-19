@@ -1,0 +1,69 @@
+// chapter-20 — Performance and Profiling in Lateralus
+use std.time.Instant
+use std.mem.size_of
+
+// Measure execution time
+fn bench<T>(name: string, f: fn() -> T) -> T {
+    let start = Instant.now()
+    let result = f()
+    let elapsed = start.elapsed_ms()
+    print("  ${name}: ${elapsed}ms")
+    result
+}
+
+// Cache-friendly vs cache-unfriendly access
+fn row_major_sum(matrix: [[int]]) -> int {
+    let mut total = 0
+    for row in matrix { for v in row { total += v } }
+    total
+}
+
+fn col_major_sum(matrix: [[int]]) -> int {
+    if matrix.is_empty() { return 0 }
+    let mut total = 0
+    let cols = matrix[0].len()
+    for c in range(0, cols) { for row in matrix { total += row[c] } }
+    total
+}
+
+// Struct-of-arrays vs array-of-structs
+struct ParticleAoS { x: float, y: float, vx: float, vy: float, mass: float }
+
+struct ParticlesSoA {
+    x:    [float],
+    y:    [float],
+    vx:   [float],
+    vy:   [float],
+    mass: [float],
+}
+
+fn update_soa(mut p: ParticlesSoA, dt: float) {
+    for i in range(0, p.x.len()) {
+        p.x[i] += p.vx[i] * dt
+        p.y[i] += p.vy[i] * dt
+    }
+}
+
+fn main() {
+    let size = 100
+    let matrix = range(0, size) |> map(|_| range(0, size) |> map(|i| i) |> collect()) |> collect()
+
+    bench("row_major_sum", || row_major_sum(matrix))
+    bench("col_major_sum", || col_major_sum(matrix))
+
+    let n = 10000
+    let mut soa = ParticlesSoA {
+        x:    range(0, n) |> map(|i| i as float * 0.1) |> collect(),
+        y:    range(0, n) |> map(|_| 0.0) |> collect(),
+        vx:   range(0, n) |> map(|_| 1.0) |> collect(),
+        vy:   range(0, n) |> map(|_| 0.5) |> collect(),
+        mass: range(0, n) |> map(|_| 1.0) |> collect(),
+    }
+    bench("SoA particle update ${n}", || update_soa(soa, 0.016))
+
+    print("
+size_of<int>   = ${size_of::<int>()}")
+    print("size_of<float> = ${size_of::<float>()}")
+    print("
+chapter 20 — performance patterns demonstrated ✓")
+}
