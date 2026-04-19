@@ -1,0 +1,41 @@
+// Solution 11 — Error Handling
+
+enum MathError {
+    DivisionByZero,
+    Overflow,
+    NegativeSquareRoot,
+}
+
+fn safe_div(a: float, b: float) -> Result<float, MathError> {
+    if b == 0.0 { err(MathError.DivisionByZero) } else { ok(a / b) }
+}
+
+fn safe_sqrt(n: float) -> Result<float, MathError> {
+    if n < 0.0 { err(MathError.NegativeSquareRoot) } else { ok(n.sqrt()) }
+}
+
+fn sqrt_of_div(a: float, b: float) -> Result<float, MathError> {
+    let q = safe_div(a, b)?
+    safe_sqrt(q)
+}
+
+fn parse_floats(s: string) -> Result<[float], string> {
+    s.split(",")
+        |> map(tok => tok.trim().parse_float()
+            .map_err(|_| "cannot parse: ${tok}"))
+        |> collect_result()
+}
+
+fn main() {
+    print(safe_div(10.0, 2.0))
+    print(safe_div(10.0, 0.0))
+    print(safe_sqrt(4.0))
+    print(safe_sqrt(-1.0))
+    print(sqrt_of_div(16.0, 4.0))
+    print(sqrt_of_div(16.0, 0.0))
+    print(parse_floats("1.0,2.5,3"))
+    print(parse_floats("1.0,abc"))
+    print("Exercise 11 complete!")
+}
+
+main()
