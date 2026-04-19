@@ -1,0 +1,90 @@
+// chapter 21 — Macros and Metaprogramming
+
+// ── 1. Declarative macros (macro_rules!) ─────────────────────────────────────
+
+// println! equivalent
+macro_rules! println {
+    ($fmt:literal)           => { print($fmt) };
+    ($fmt:literal, $($x:expr),*) => { print(format!($fmt, $($x),*)) };
+}
+
+// A simple map! literal
+macro_rules! map {
+    () => { dict() };
+    ($($k:expr => $v:expr),+ $(,)?) => {{
+        let mut m = dict();
+        $( m.insert($k, $v); )+
+        m
+    }};
+}
+
+// min! variadic
+macro_rules! min {
+    ($a:expr)                   => { $a };
+    ($a:expr, $b:expr)          => { if $a < $b { $a } else { $b } };
+    ($a:expr, $($rest:expr),+)  => { min!($a, min!($($rest),+)) };
+}
+
+// ── 2. Procedural macros ──────────────────────────────────────────────────────
+// Defined in a separate proc-macro crate (see exercises)
+
+// #[derive(Builder)] usage
+#[derive(Builder, Debug)]
+struct HttpRequest {
+    method:  string,
+    url:     string,
+    headers: dict<string, string>,
+    body:    [u8],
+    timeout: int,
+}
+// Auto-generates HttpRequestBuilder.new().<field>(v).build()
+
+// Attribute macro: #[retry(times=3, backoff_ms=100)]
+#[retry(times=3, backoff_ms=100)]
+fn fetch_data(url: string) -> Result<string, string> {
+    // If this returns Err, the macro re-tries up to 3 times
+    http.get(url).map_err(|e| e.to_string())
+}
+
+// Function-like macro: sql!
+let query = sql!(SELECT id, name FROM users WHERE age > {min_age} ORDER BY name LIMIT {limit});
+// Generates type-safe query object with bound parameters
+
+// ── 3. Macro hygiene ──────────────────────────────────────────────────────────
+// Hygiene: macros create their own scope for bindings
+macro_rules! swap {
+    ($a:expr, $b:expr) => {{
+        let tmp = $a;  // 'tmp' does not leak into caller scope
+        $a = $b;
+        $b = tmp;
+    }};
+}
+
+fn main() {
+    println!("Chapter 21 — Macros")
+
+    let m = map!("a" => 1, "b" => 2, "c" => 3)
+    assert(m["a"] == 1 && m.len() == 3)
+    println!("map! ✓")
+
+    assert(min!(5, 3, 8, 1, 4) == 1)
+    println!("min! ✓")
+
+    let req = HttpRequestBuilder.new()
+        .method("GET".to_string())
+        .url("https://example.com".to_string())
+        .headers(dict())
+        .body([])
+        .timeout(30)
+        .build()
+    assert(req.timeout == 30)
+    println!("Builder derive ✓")
+
+    let mut x = 10
+    let mut y = 20
+    swap!(x, y)
+    assert(x == 20 && y == 10)
+    println!("swap! (hygienic) ✓")
+
+    println!("chapter 21 macros — complete ✓")
+}
