@@ -1,0 +1,64 @@
+// chapter 21 exercises
+
+// Ex 1: Write a `repeat!` macro that calls an expression N times
+macro_rules! repeat {
+    ($n:expr, $body:expr) => {{
+        let mut _i = 0;
+        while _i < $n { $body; _i += 1; }
+    }};
+}
+
+// Ex 2: Write a `hash_map!` macro (alias for map! but explicit type)
+macro_rules! hash_map {
+    ($($k:expr => $v:expr),* $(,)?) => {{
+        let mut m = std.collections.HashMap.new();
+        $( m.insert($k, $v); )*
+        m
+    }};
+}
+
+// Ex 3: Write a `with!` macro for resource cleanup (like Python "with")
+macro_rules! with {
+    ($resource:expr, |$name:ident| $body:block) => {{
+        let $name = $resource;
+        let result = $body;
+        $name.close();
+        result
+    }};
+}
+
+// Ex 4: Derive Validate — checks string fields are non-empty
+#[derive(Validate)]
+struct RegistrationForm {
+    #[validate(non_empty, email)]
+    email:    string,
+    #[validate(min_len=8)]
+    password: string,
+    #[validate(non_empty)]
+    username: string,
+}
+
+fn main() {
+    let mut count = 0
+    repeat!(5, count += 1)
+    assert(count == 5, "repeat! should call body 5 times")
+
+    let m: std.collections.HashMap<string, int> = hash_map!("x" => 10, "y" => 20)
+    assert(m.get("x") == some(10))
+
+    // with! resource management
+    // with!(File.open("test.txt"), |f| { let _ = f.read() })
+
+    // Ex 4: validation derive
+    let form = RegistrationForm {
+        email:    "user@example.com",
+        password: "hunter2!",
+        username: "alice",
+    }
+    assert(form.validate().is_ok())
+
+    let bad = RegistrationForm { email: "notanemail", password: "short", username: "" }
+    assert(bad.validate().is_err())
+
+    print("exercises 21 — all passed ✓")
+}
