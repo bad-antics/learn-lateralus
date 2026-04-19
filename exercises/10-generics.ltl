@@ -1,0 +1,56 @@
+// Exercise 10 — Generics & Traits
+// Run: lateralus run exercises/10-generics.ltl
+
+// 1. Generic identity function
+fn identity<T>(x: T) -> T {
+    // TODO
+    x
+}
+
+// 2. Generic zip — combine two lists into pairs, stopping at shortest
+fn zip<A, B>(a: [A], b: [B]) -> [(A, B)] {
+    // TODO
+    []
+}
+
+// 3. Generic Stack (push / pop / peek / is_empty)
+struct Stack<T> {
+    items: [T],
+}
+
+impl<T> Stack<T> {
+    fn new() -> Stack<T> { Stack { items: [] } }
+    // TODO: push, pop, peek, is_empty
+}
+
+// 4. max_by — find max using a key function
+fn max_by<T, K: Ord>(items: [T], key: fn(T) -> K) -> T? {
+    // TODO
+    none
+}
+
+fn main() {
+    assert_eq(identity(42), 42)
+    assert_eq(identity("hi"), "hi")
+
+    assert_eq(zip([1, 2, 3], ["a", "b"]), [(1, "a"), (2, "b")])
+
+    mut s: Stack<int> = Stack.new()
+    s.push(10); s.push(20); s.push(30)
+    assert_eq(s.peek(), some(30))
+    assert_eq(s.pop(), some(30))
+    assert_eq(s.pop(), some(20))
+
+    struct Person { name: string, age: int }
+    let people = [
+        Person { name: "Alice", age: 30 },
+        Person { name: "Bob",   age: 25 },
+        Person { name: "Carol", age: 35 },
+    ]
+    let oldest = max_by(people, p => p.age)
+    assert_eq(oldest?.name, some("Carol"))
+
+    print("Exercise 10 complete!")
+}
+
+main()
