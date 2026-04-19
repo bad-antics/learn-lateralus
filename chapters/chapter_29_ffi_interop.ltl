@@ -1,0 +1,227 @@
+// Chapter 29 — Foreign Function Interface (FFI)
+// Calling C from Lateralus, exposing Lateralus to C, safety boundaries.
+
+use std.ffi.{CStr, CString}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 1: Calling C functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+extern "C" {
+    fn strlen(s: *const u8) -> usize
+    fn memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8
+    fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8
+    fn malloc(size: usize) -> *mut u8
+    fn free(ptr: *mut u8)
+    fn puts(s: *const u8) -> i32
+    fn qsort(base: *mut u8, nmemb: usize, size: usize, compar: extern "C" fn(*const u8, *const u8) -> i32)
+}
+
+// Safe wrappers around C functions
+fn c_strlen(s: &str) -> usize {
+    let cstr = CString.new(s).unwrap()
+    unsafe { strlen(cstr.as_ptr()) }
+}
+
+fn c_memcpy(dst: &mut [u8], src: &[u8], n: usize) {
+    assert(n <= dst.len() && n <= src.len())
+    unsafe { memcpy(dst.as_mut_ptr(), src.as_ptr(), n); }
+}
+
+fn c_alloc<T>(count: usize) -> *mut T {
+    let size = std.mem.size_of::<T>() * count
+    let ptr = unsafe { malloc(size) }
+    if ptr.is_null() { panic("allocation failed") }
+    unsafe { memset(ptr, 0, size); }
+    ptr as *mut T
+}
+
+fn c_free<T>(ptr: *mut T) { unsafe { free(ptr as *mut u8) } }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 2: Exposing Lateralus functions to C
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// #[no_mangle] prevents name mangling
+// extern "C" makes it C-callable
+
+#[no_mangle]
+pub extern "C" fn lateralus_add(a: i32, b: i32) -> i32 { a + b }
+
+#[no_mangle]
+pub extern "C" fn lateralus_fibonacci(n: u32) -> u64 {
+    if n <= 1 { return n as u64 }
+    let mut a: u64 = 0
+    let mut b: u64 = 1
+    for _ in 2..=n {
+        let tmp = a + b
+        a = b; b = tmp
+    }
+    b
+}
+
+// Opaque type for C consumers
+pub struct LateralusString {
+    inner: string,
+}
+
+#[no_mangle]
+pub extern "C" fn lateralus_string_new(ptr: *const u8, len: usize) -> *mut LateralusString {
+    let slice = unsafe { std.slice.from_raw_parts(ptr, len) }
+    let s = string.from_utf8(slice.to_vec()).unwrap_or_default()
+    Box.into_raw(Box.new(LateralusString { inner: s }))
+}
+
+#[no_mangle]
+pub extern "C" fn lateralus_string_len(s: *const LateralusString) -> usize {
+    if s.is_null() { return 0 }
+    unsafe { (*s).inner.len() }
+}
+
+#[no_mangle]
+pub extern "C" fn lateralus_string_ptr(s: *const LateralusString) -> *const u8 {
+    if s.is_null() { return std.ptr.null() }
+    unsafe { (*s).inner.as_ptr() }
+}
+
+#[no_mangle]
+pub extern "C" fn lateralus_string_free(s: *mut LateralusString) {
+    if !s.is_null() { unsafe { drop(Box.from_raw(s)) } }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 3: CStr and CString
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct CString {
+    inner: [u8],  // null-terminated
+}
+
+impl CString {
+    fn new(s: &str) -> Result<CString, string> {
+        if s.bytes().any(|b| b == 0) { return err("interior null byte".to_string()) }
+        let mut bytes: [u8] = s.bytes().collect()
+        bytes.push(0)
+        ok(CString { inner: bytes })
+    }
+
+    fn as_ptr(self) -> *const u8 { self.inner.as_ptr() }
+    fn as_bytes(self) -> &[u8] { &self.inner[..self.inner.len()-1] }
+    fn to_str(self) -> &str { std.str.from_utf8(self.as_bytes()).unwrap() }
+}
+
+struct CStr {
+    ptr: *const u8,
+}
+
+impl CStr {
+    fn from_ptr(ptr: *const u8) -> CStr { CStr { ptr } }
+
+    fn to_str(self) -> Result<&str, string> {
+        let mut len = 0
+        unsafe { while *self.ptr.add(len) != 0 { len += 1 } }
+        let slice = unsafe { std.slice.from_raw_parts(self.ptr, len) }
+        std.str.from_utf8(slice).map_err(|e| e.to_string())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 4: Callback patterns
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// C-compatible callback
+type CCallback = extern "C" fn(data: *mut u8, value: i32) -> i32
+
+struct CallbackContext {
+    sum: i32,
+    count: i32,
+}
+
+extern "C" fn accumulator_callback(data: *mut u8, value: i32) -> i32 {
+    let ctx = unsafe { &mut *(data as *mut CallbackContext) }
+    ctx.sum += value
+    ctx.count += 1
+    ctx.sum
+}
+
+fn process_with_callback(values: &[i32], callback: CCallback, data: *mut u8) -> [i32] {
+    values.iter().map(|&v| callback(data, v)).collect()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 5: Struct layout compatibility
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[repr(C)]
+struct CPoint { x: f64, y: f64 }
+
+#[repr(C)]
+struct CRect { origin: CPoint, size: CPoint }
+
+#[repr(C, packed)]
+struct PackedHeader {
+    magic: u32,
+    version: u8,
+    flags: u16,
+    length: u32,
+}
+
+#[repr(C)]
+enum CColor: i32 { Red = 0, Green = 1, Blue = 2 }
+
+fn main() {
+    // CString
+    let cs = CString.new("Hello, C!").unwrap()
+    assert(cs.as_bytes() == b"Hello, C!")
+    assert(cs.to_str() == "Hello, C!")
+    print("CString: '${cs.to_str()}' ✓")
+
+    // Interior null rejected
+    assert(CString.new("hello\0world").is_err())
+    print("Interior null rejected ✓")
+
+    // C-compatible strlen
+    let len = c_strlen("Lateralus")
+    assert(len == 9)
+    print("c_strlen(\"Lateralus\") = ${len} ✓")
+
+    // memcpy wrapper
+    let src = [1u8, 2, 3, 4, 5]
+    let mut dst = [0u8; 5]
+    c_memcpy(&mut dst, &src, 5)
+    assert(dst == [1, 2, 3, 4, 5])
+    print("c_memcpy ✓")
+
+    // Exported functions
+    assert(lateralus_add(3, 4) == 7)
+    assert(lateralus_fibonacci(10) == 55)
+    print("lateralus_add(3, 4) = 7 ✓")
+    print("lateralus_fibonacci(10) = 55 ✓")
+
+    // Opaque string type
+    let data = "Hello from Lateralus"
+    let ls = lateralus_string_new(data.as_ptr(), data.len())
+    assert(lateralus_string_len(ls) == 20)
+    lateralus_string_free(ls)
+    print("LateralusString FFI ✓")
+
+    // Callback pattern
+    let mut ctx = CallbackContext { sum: 0, count: 0 }
+    let values = [10, 20, 30]
+    let results = process_with_callback(&values, accumulator_callback, &mut ctx as *mut _ as *mut u8)
+    assert(ctx.sum == 60)
+    assert(ctx.count == 3)
+    assert(results == [10, 30, 60])
+    print("C callback: sum=${ctx.sum}, count=${ctx.count} ✓")
+
+    // Struct layout
+    assert(std.mem.size_of::<CPoint>() == 16)  // 2 × f64
+    assert(std.mem.size_of::<CColor>() == 4)   // i32
+    print("#[repr(C)] layout ✓")
+
+    // Packed struct
+    assert(std.mem.size_of::<PackedHeader>() == 11)  // 4+1+2+4, no padding
+    print("#[repr(C, packed)] ✓")
+
+    print("Chapter 29 — FFI Interop complete ✓")
+}
