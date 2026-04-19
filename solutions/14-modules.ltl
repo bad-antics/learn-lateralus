@@ -1,0 +1,57 @@
+// Solution 14 — Modules & Packages
+
+mod geometry {
+    use std.math.PI
+
+    pub trait Shape {
+        fn area(self)      -> float
+        fn perimeter(self) -> float
+    }
+
+    pub struct Circle { radius: float }
+    pub struct Rect   { width: float, height: float }
+
+    impl Shape for Circle {
+        fn area(self)      -> float { PI * self.radius * self.radius }
+        fn perimeter(self) -> float { 2.0 * PI * self.radius }
+    }
+
+    impl Shape for Rect {
+        fn area(self)      -> float { self.width * self.height }
+        fn perimeter(self) -> float { 2.0 * (self.width + self.height) }
+    }
+}
+
+mod stats {
+    pub fn mean(xs: [float]) -> float {
+        xs |> sum() / xs.len().float()
+    }
+
+    pub fn variance(xs: [float]) -> float {
+        let m = mean(xs)
+        xs |> map(x => (x - m) * (x - m)) |> mean()
+    }
+
+    pub fn std_dev(xs: [float]) -> float {
+        variance(xs).sqrt()
+    }
+}
+
+fn main() {
+    use geometry.{Circle, Rect, Shape}
+    use stats.{mean, std_dev}
+
+    let c = Circle { radius: 5.0 }
+    let r = Rect   { width: 4.0, height: 6.0 }
+
+    print("Circle area:      ${c.area().round(4)}")
+    print("Rect perimeter:   ${r.perimeter()}")
+
+    let data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    print("Mean:    ${mean(data)}")
+    print("Std dev: ${std_dev(data)}")
+    assert_eq(mean(data), 5.0)
+    print("Exercise 14 complete!")
+}
+
+main()
