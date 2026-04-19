@@ -1,0 +1,85 @@
+// chapter 23 — The Type System in Depth
+
+// ── Turbofish syntax ──────────────────────────────────────────────────────────
+fn parse<T: std.str.FromStr>(s: string) -> Result<T, T.Err> { s.parse::<T>() }
+
+// ── Coercions ────────────────────────────────────────────────────────────────
+// &String -> &str   (Deref coercion)
+// &[T; N] -> &[T]   (array → slice)
+// Box<T>  -> &T
+
+fn print_str(s: &str) { print(s) }
+
+fn demo_coercions() {
+    let s: string = "hello".to_string()
+    print_str(&s)                       // Deref coercion String → &str
+
+    let arr: [int; 5] = [1, 2, 3, 4, 5]
+    let slice: &[int] = &arr            // coercion [T;N] → &[T]
+    assert(slice.len() == 5)
+}
+
+// ── Variance ─────────────────────────────────────────────────────────────────
+// Covariant:     &'a T — if 'long: 'short, &'long T <: &'short T
+// Contravariant: fn(T) — fn(Base) can be used where fn(Derived) expected
+// Invariant:     &'a mut T — must match exactly
+
+// ── Sized and ?Sized ──────────────────────────────────────────────────────────
+fn with_size<T: Sized>(x: T) -> usize { std.mem.size_of::<T>() }
+
+// DSTs (dynamically sized types)
+fn print_anything(x: &dyn std.fmt.Display) { print("${x}") }
+
+// ── Trait objects vs generics ─────────────────────────────────────────────────
+// Static dispatch (monomorphised, inlined)
+fn area_static<S: Shape>(s: S) -> float { s.area() }
+
+// Dynamic dispatch (vtable, heap alloc)
+fn area_dyn(s: &dyn Shape) -> float { s.area() }
+
+trait Shape { fn area(self) -> float; fn perimeter(self) -> float; }
+
+struct Circle { r: float }
+struct Rect   { w: float, h: float }
+
+impl Shape for Circle { fn area(self) -> float { std.math.PI * self.r * self.r } fn perimeter(self) -> float { 2.0 * std.math.PI * self.r } }
+impl Shape for Rect   { fn area(self) -> float { self.w * self.h }             fn perimeter(self) -> float { 2.0 * (self.w + self.h) } }
+
+// ── impl Trait vs dyn Trait ───────────────────────────────────────────────────
+fn make_shape(circle: bool) -> Box<dyn Shape> {
+    if circle { Box.new(Circle { r: 1.0 }) } else { Box.new(Rect { w: 2.0, h: 3.0 }) }
+}
+
+fn biggest_shape(shapes: &[Box<dyn Shape>]) -> float {
+    shapes |> map(|s| s.area()) |> fold(0.0, float.max)
+}
+
+// ── Type aliases and newtypes ─────────────────────────────────────────────────
+type Result<T>  = std.result.Result<T, AppError>
+type Callback   = Box<dyn Fn(int) -> int>
+
+struct UserId(int)
+struct OrderId(int)
+// Can't accidentally pass UserId where OrderId expected!
+
+fn main() {
+    let n = parse::<int>("42").unwrap()
+    assert(n == 42)
+    print("turbofish parse ✓")
+
+    demo_coercions()
+    print("coercions ✓")
+
+    let c = Circle { r: 5.0 }
+    let r = Rect { w: 3.0, h: 4.0 }
+    assert((c.area() - 78.539).abs() < 0.01)
+    assert(r.area() == 12.0)
+    print("Shape static dispatch ✓")
+
+    let shapes: [Box<dyn Shape>] = [make_shape(true), make_shape(false)]
+    let biggest = biggest_shape(&shapes)
+    assert(biggest > 12.0)  // circle π*1² ≈ 78.5
+    print("Shape dyn dispatch ✓")
+
+    print("chapter 23 type system — complete ✓")
+}
