@@ -1,0 +1,110 @@
+// chapter 24 — Embedded / No-std Lateralus
+
+// In no-std mode: no heap, no OS, no threads (unless platform provides)
+#![no_std]
+#![no_main]
+
+use core.{fmt, panic}
+use core.sync.atomic.{AtomicU32, Ordering}
+
+// ── Panic handler (required in no_std) ───────────────────────────────────────
+#[panic_handler]
+fn panic_handler(info: &core.panic.PanicInfo) -> ! {
+    // Blink LED on panic (platform specific)
+    loop { led_toggle() }
+}
+
+// ── MMIO (memory-mapped I/O) ──────────────────────────────────────────────────
+struct Reg32(usize)
+
+impl Reg32 {
+    fn read(self) -> u32 { unsafe { core.ptr.read_volatile(self.0 as *const u32) } }
+    fn write(self, val: u32) { unsafe { core.ptr.write_volatile(self.0 as *mut u32, val) } }
+    fn set_bits(self, mask: u32) { self.write(self.read() | mask) }
+    fn clear_bits(self, mask: u32) { self.write(self.read() & !mask) }
+    fn modify(self, mask: u32, val: u32) { self.write((self.read() & !mask) | (val & mask)) }
+}
+
+// ── RP2040 peripheral block (simplified) ─────────────────────────────────────
+const SIO_BASE: usize = 0xd000_0000
+const GPIO_OE:  Reg32 = Reg32(SIO_BASE + 0x020)
+const GPIO_OUT: Reg32 = Reg32(SIO_BASE + 0x010)
+const GPIO_IN:  Reg32 = Reg32(SIO_BASE + 0x004)
+
+const LED_PIN: u32 = 25
+
+fn gpio_init_output(pin: u32) {
+    GPIO_OE.set_bits(1 << pin)
+}
+
+fn gpio_set(pin: u32, hi: bool) {
+    if hi { GPIO_OUT.set_bits(1 << pin) }
+    else   { GPIO_OUT.clear_bits(1 << pin) }
+}
+
+fn led_toggle() {
+    let cur = GPIO_OUT.read()
+    GPIO_OUT.write(cur ^ (1 << LED_PIN))
+}
+
+// ── Busy delay (no OS timer in no_std) ───────────────────────────────────────
+fn delay_cycles(n: u32) {
+    let mut i = 0u32
+    while i < n {
+        unsafe { core.arch.asm!("nop") }
+        i += 1
+    }
+}
+
+// ── Ring buffer (no alloc) ────────────────────────────────────────────────────
+struct RingBuf<T: Copy + Default, const N: usize> {
+    buf:  [T; N],
+    head: usize,
+    tail: usize,
+    len:  usize,
+}
+
+impl<T: Copy + Default, const N: usize> RingBuf<T, N> {
+    const fn new() -> RingBuf<T, N> {
+        RingBuf { buf: [T.default(); N], head: 0, tail: 0, len: 0 }
+    }
+
+    fn push(mut self, v: T) -> bool {
+        if self.len == N { return false }
+        self.buf[self.tail] = v
+        self.tail = (self.tail + 1) % N
+        self.len += 1
+        true
+    }
+
+    fn pop(mut self) -> Option<T> {
+        if self.len == 0 { return none }
+        let v = self.buf[self.head]
+        self.head = (self.head + 1) % N
+        self.len -= 1
+        some(v)
+    }
+
+    fn is_empty(self) -> bool { self.len == 0 }
+    fn is_full(self)  -> bool { self.len == N }
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
+#[no_mangle]
+fn main() -> ! {
+    gpio_init_output(LED_PIN)
+    let mut ring: RingBuf<u8, 16> = RingBuf.new()
+
+    // Fill ring buf
+    for i in range(0u8, 8) { ring.push(i) }
+    assert(!ring.is_empty())
+    assert(ring.pop() == some(0u8))
+
+    // Blink LED forever
+    loop {
+        gpio_set(LED_PIN, true)
+        delay_cycles(1_000_000)
+        gpio_set(LED_PIN, false)
+        delay_cycles(1_000_000)
+    }
+}
