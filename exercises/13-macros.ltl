@@ -1,0 +1,40 @@
+// Exercise 13 — Macros
+// Run: lateralus run exercises/13-macros.ltl
+
+// 1. Define a `hashmap!` macro that creates a dict from key => value pairs
+//    Usage: hashmap!{ "a" => 1, "b" => 2 }
+macro hashmap! {
+    // TODO
+}
+
+// 2. Define an `assert_close!` macro for float equality within epsilon
+//    Usage: assert_close!(0.1 + 0.2, 0.3, 1e-10)
+macro assert_close! {
+    // TODO
+}
+
+// 3. Define a `retry!(n, expr)` macro that evaluates expr up to n times
+//    and returns the first ok() result, or the last err()
+macro retry! {
+    // TODO
+}
+
+fn main() {
+    let m = hashmap!{ "foo" => 1, "bar" => 2, "baz" => 3 }
+    assert_eq(m["foo"], 1)
+    assert_eq(m.len(), 3)
+
+    assert_close!(0.1 + 0.2, 0.3, 1e-10)
+
+    mut attempts = 0
+    let result = retry!(3, {
+        attempts += 1
+        if attempts < 3 { err("not yet") } else { ok(42) }
+    })
+    assert_eq(result, ok(42))
+    assert_eq(attempts, 3)
+
+    print("Exercise 13 complete!")
+}
+
+main()
