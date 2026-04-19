@@ -1,0 +1,256 @@
+// Chapter 30 — Unsafe Code in Lateralus
+// Raw pointers, unsafe blocks, when and how to use unsafe safely.
+
+use std.mem
+use std.ptr
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 1: Raw Pointers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn raw_pointer_basics() {
+    // Creating raw pointers (safe)
+    let x: i32 = 42
+    let raw_ptr: *const i32 = &x as *const i32
+    let mut y: i32 = 100
+    let raw_mut_ptr: *mut i32 = &mut y as *mut i32
+
+    // Dereferencing requires unsafe
+    unsafe {
+        assert(*raw_ptr == 42)
+        *raw_mut_ptr = 200
+        assert(*raw_mut_ptr == 200)
+    }
+
+    // Pointer arithmetic
+    let arr = [10, 20, 30, 40, 50]
+    let base: *const i32 = arr.as_ptr()
+    unsafe {
+        assert(*base == 10)
+        assert(*base.add(1) == 20)
+        assert(*base.add(4) == 50)
+        assert(*base.offset(2) == 30)
+    }
+
+    // Null pointer checks
+    let null_ptr: *const i32 = ptr.null()
+    assert(null_ptr.is_null())
+    let non_null: *const i32 = &x
+    assert(!non_null.is_null())
+
+    print("Raw pointer basics ✓")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 2: Unsafe Functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// # Safety
+/// `ptr` must point to a valid, aligned `T` and must not be aliased mutably.
+unsafe fn read_from<T: Copy>(ptr: *const T) -> T { ptr.read() }
+
+/// # Safety
+/// `ptr` must point to valid, writable, aligned memory for `T`.
+unsafe fn write_to<T>(ptr: *mut T, val: T) { ptr.write(val) }
+
+/// # Safety
+/// Both pointers must be valid, non-overlapping, and properly aligned.
+unsafe fn swap_raw<T>(a: *mut T, b: *mut T) {
+    let tmp = ptr.read(a)
+    ptr.copy(b, a, 1)
+    ptr.write(b, tmp)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 3: Safe Abstractions over Unsafe Code
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Split a mutable slice at an index (like split_at_mut)
+fn split_at_mut<T>(slice: &mut [T], mid: usize) -> (&mut [T], &mut [T]) {
+    assert(mid <= slice.len())
+    let ptr = slice.as_mut_ptr()
+    unsafe {
+        (
+            std.slice.from_raw_parts_mut(ptr, mid),
+            std.slice.from_raw_parts_mut(ptr.add(mid), slice.len() - mid),
+        )
+    }
+}
+
+// Manually managed heap allocation
+struct RawVec<T> {
+    ptr: *mut T,
+    cap: usize,
+    len: usize,
+}
+
+impl<T> RawVec<T> {
+    fn new() -> RawVec<T> {
+        RawVec { ptr: ptr.null_mut(), cap: 0, len: 0 }
+    }
+
+    fn with_capacity(cap: usize) -> RawVec<T> {
+        if cap == 0 { return Self.new() }
+        let layout = std.alloc.Layout.array::<T>(cap).unwrap()
+        let ptr = unsafe { std.alloc.alloc(layout) as *mut T }
+        if ptr.is_null() { panic("allocation failed") }
+        RawVec { ptr, cap, len: 0 }
+    }
+
+    fn push(mut self, value: T) {
+        if self.len == self.cap { self.grow() }
+        unsafe { self.ptr.add(self.len).write(value) }
+        self.len += 1
+    }
+
+    fn pop(mut self) -> Option<T> {
+        if self.len == 0 { return none }
+        self.len -= 1
+        some(unsafe { self.ptr.add(self.len).read() })
+    }
+
+    fn get(self, index: usize) -> Option<&T> {
+        if index >= self.len { return none }
+        some(unsafe { &*self.ptr.add(index) })
+    }
+
+    fn get_mut(mut self, index: usize) -> Option<&mut T> {
+        if index >= self.len { return none }
+        some(unsafe { &mut *self.ptr.add(index) })
+    }
+
+    fn grow(mut self) {
+        let new_cap = if self.cap == 0 { 4 } else { self.cap * 2 }
+        let new_layout = std.alloc.Layout.array::<T>(new_cap).unwrap()
+        let new_ptr = if self.cap == 0 {
+            unsafe { std.alloc.alloc(new_layout) as *mut T }
+        } else {
+            let old_layout = std.alloc.Layout.array::<T>(self.cap).unwrap()
+            unsafe { std.alloc.realloc(self.ptr as *mut u8, old_layout, new_layout.size()) as *mut T }
+        }
+        if new_ptr.is_null() { panic("reallocation failed") }
+        self.ptr = new_ptr
+        self.cap = new_cap
+    }
+
+    fn as_slice(self) -> &[T] {
+        if self.len == 0 { return &[] }
+        unsafe { std.slice.from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl<T> Drop for RawVec<T> {
+    fn drop(mut self) {
+        if self.cap > 0 {
+            // Drop all elements
+            for i in 0..self.len { unsafe { self.ptr.add(i).drop_in_place() } }
+            let layout = std.alloc.Layout.array::<T>(self.cap).unwrap()
+            unsafe { std.alloc.dealloc(self.ptr as *mut u8, layout) }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 4: Transmute and Type Punning
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn float_bits(f: f32) -> u32 { unsafe { mem.transmute::<f32, u32>(f) } }
+fn bits_float(u: u32) -> f32 { unsafe { mem.transmute::<u32, f32>(u) } }
+
+fn enum_to_int<E: Copy>(e: E) -> i32 {
+    assert(mem.size_of::<E>() <= mem.size_of::<i32>())
+    unsafe {
+        let mut result: i32 = 0
+        ptr.copy_nonoverlapping(&e as *const E as *const u8, &mut result as *mut i32 as *mut u8, mem.size_of::<E>())
+        result
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 5: Unsafe Traits
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// # Safety
+/// Implementors must guarantee that the type can be safely zeroed.
+unsafe trait Zeroable { fn zeroed() -> Self }
+
+unsafe impl Zeroable for u8 { fn zeroed() -> u8 { 0 } }
+unsafe impl Zeroable for u32 { fn zeroed() -> u32 { 0 } }
+unsafe impl Zeroable for i32 { fn zeroed() -> i32 { 0 } }
+unsafe impl Zeroable for f32 { fn zeroed() -> f32 { 0.0 } }
+unsafe impl Zeroable for f64 { fn zeroed() -> f64 { 0.0 } }
+
+unsafe impl<T: Zeroable, const N: usize> Zeroable for [T; N] {
+    fn zeroed() -> [T; N] { unsafe { mem.zeroed() } }
+}
+
+fn zero_alloc<T: Zeroable>(count: usize) -> [T] {
+    (0..count).map(|_| T.zeroed()).collect()
+}
+
+fn main() {
+    // Part 1
+    raw_pointer_basics()
+
+    // Part 2: Unsafe functions
+    let mut val: i32 = 0
+    unsafe {
+        write_to(&mut val as *mut i32, 99)
+        assert(read_from(&val as *const i32) == 99)
+    }
+    print("Unsafe read/write ✓")
+
+    let mut a: i32 = 10
+    let mut b: i32 = 20
+    unsafe { swap_raw(&mut a, &mut b) }
+    assert(a == 20 && b == 10)
+    print("swap_raw ✓")
+
+    // Part 3: Safe abstractions
+    let mut data = [1, 2, 3, 4, 5, 6]
+    let (left, right) = split_at_mut(&mut data, 3)
+    assert(left == &[1, 2, 3])
+    assert(right == &[4, 5, 6])
+    left[0] = 10
+    right[0] = 40
+    assert(data == [10, 2, 3, 40, 5, 6])
+    print("split_at_mut ✓")
+
+    // RawVec
+    let mut rv = RawVec::<i32>.with_capacity(2)
+    rv.push(100); rv.push(200); rv.push(300)  // triggers grow
+    assert(rv.len == 3)
+    assert(*rv.get(0).unwrap() == 100)
+    assert(*rv.get(2).unwrap() == 300)
+    assert(rv.pop() == some(300))
+    assert(rv.len == 2)
+    print("RawVec push/pop/get ✓")
+
+    let slice = rv.as_slice()
+    assert(slice == &[100, 200])
+    print("RawVec as_slice ✓")
+
+    // Part 4: Transmute
+    let pi_bits = float_bits(std.f32.consts.PI)
+    let pi_back = bits_float(pi_bits)
+    assert((pi_back - std.f32.consts.PI).abs() < 1e-7)
+    print("float ↔ bits: 0x${pi_bits:08X} ✓")
+
+    // NaN check via bits
+    let nan_bits = float_bits(f32.NAN)
+    assert(nan_bits & 0x7F80_0000 == 0x7F80_0000)  // exponent all 1s
+    assert(nan_bits & 0x007F_FFFF != 0)  // mantissa non-zero
+    print("NaN bit pattern ✓")
+
+    // Part 5: Zeroable
+    let zeroed_arr: [u32; 4] = Zeroable.zeroed()
+    assert(zeroed_arr == [0, 0, 0, 0])
+    print("Zeroable array ✓")
+
+    let z_vec: [f64] = zero_alloc(5)
+    assert(z_vec.len() == 5)
+    assert(z_vec.iter().all(|x| *x == 0.0))
+    print("zero_alloc ✓")
+
+    print("Chapter 30 — Unsafe Code complete ✓")
+}
