@@ -1,0 +1,54 @@
+// chapter-19 — FFI: Calling C from Lateralus
+extern "C" {
+    fn strlen(s: *const u8)         -> usize
+    fn malloc(size: usize)          -> *mut u8
+    fn free(ptr: *mut u8)
+    fn memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8
+    fn printf(fmt: *const u8, ...)  -> int
+}
+
+// Safe wrapper around strlen
+fn c_str_len(s: &str) -> usize {
+    unsafe { strlen(s.as_ptr()) }
+}
+
+// Safe heap allocation helper
+fn c_alloc_copy(data: &[u8]) -> Result<*mut u8, string> {
+    unsafe {
+        let ptr = malloc(data.len())
+        if ptr.is_null() {
+            return err("malloc failed")
+        }
+        memcpy(ptr, data.as_ptr(), data.len())
+        ok(ptr)
+    }
+}
+
+// Exporting a Lateralus function to C
+#[no_mangle]
+pub extern "C" fn ltl_add(a: i32, b: i32) -> i32 { a + b }
+
+// Calling a C callback
+type CCallback = extern "C" fn(i32) -> i32
+
+fn apply_c_callback(f: CCallback, v: i32) -> i32 {
+    unsafe { f(v) }
+}
+
+fn main() {
+    let hello = "hello"
+    let len = c_str_len(hello)
+    assert(len == 5)
+    print("strlen("hello") = ${len} ✓")
+
+    let result = c_alloc_copy(b"test data")
+    match result {
+        ok(ptr) => {
+            print("malloc + memcpy succeeded ✓")
+            unsafe { free(ptr) }
+        },
+        err(e) => print("error: ${e}"),
+    }
+
+    print("chapter 19 — FFI basics demonstrated ✓")
+}
