@@ -1,0 +1,56 @@
+// chapter-18 — Concurrency Patterns in Lateralus
+use std.sync.{Arc, Mutex, channel, Sender, Receiver}
+use std.task.{spawn, join_all, sleep_ms}
+
+// 1. Shared state with Arc<Mutex<T>>
+async fn shared_counter() {
+    let counter = Arc.new(Mutex.new(0))
+    let tasks: [Task<()>] = range(0, 10) |> map(|_| {
+        let c = counter.clone()
+        spawn(async {
+            let mut lock = c.lock().await
+            *lock += 1
+        })
+    }) |> collect()
+    join_all(tasks).await
+    assert(*counter.lock().await == 10)
+    print("  shared_counter: 10 ✓")
+}
+
+// 2. Message passing with channels
+async fn pipeline_example() {
+    let (tx, rx) = channel()
+    spawn(async {
+        for i in range(0, 5) { tx.send(i * i).await }
+        tx.close()
+    })
+    let results: [int] = rx |> collect_async().await
+    assert(results == [0, 1, 4, 9, 16])
+    print("  pipeline_example: [0,1,4,9,16] ✓")
+}
+
+// 3. Select on multiple channels (fan-in)
+async fn fan_in() {
+    let (tx1, rx1) = channel()
+    let (tx2, rx2) = channel()
+    spawn(async { tx1.send("from-1").await })
+    spawn(async { tx2.send("from-2").await })
+    let mut received = []
+    for _ in range(0, 2) {
+        let msg = select! {
+            m = rx1.recv() => m,
+            m = rx2.recv() => m,
+        }
+        received.push(msg)
+    }
+    received.sort()
+    assert(received == ["from-1", "from-2"])
+    print("  fan_in: both received ✓")
+}
+
+async fn main() {
+    shared_counter().await
+    pipeline_example().await
+    fan_in().await
+    print("chapter 18 — all async tests passed ✓")
+}
