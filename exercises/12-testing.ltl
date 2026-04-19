@@ -1,0 +1,36 @@
+// Exercise 12 — Testing
+// Run: lateralus test exercises/12-testing.ltl
+
+fn is_palindrome(s: string) -> bool {
+    let chars = s.chars() |> collect()
+    chars == chars |> reverse() |> collect()
+}
+
+fn count_words(s: string) -> int {
+    s.split_whitespace() |> filter(w => !w.is_empty()) |> count()
+}
+
+fn fizzbuzz(n: int) -> string {
+    match (n % 3, n % 5) {
+        (0, 0) => "FizzBuzz",
+        (0, _) => "Fizz",
+        (_, 0) => "Buzz",
+        _      => n.to_string(),
+    }
+}
+
+// TODO: write at least 3 tests for is_palindrome
+// TODO: write a table test for fizzbuzz covering n=1,3,5,15,16
+// TODO: write 2 tests for count_words (empty string, multi-space)
+
+test "is_palindrome — add your tests" {
+    // TODO
+}
+
+test "fizzbuzz table" {
+    // TODO
+}
+
+test "count_words" {
+    // TODO
+}
