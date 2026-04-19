@@ -1,0 +1,90 @@
+// chapter 22 — Unsafe Lateralus
+
+// Five unsafe superpowers:
+// 1. Dereference raw pointers
+// 2. Call unsafe functions
+// 3. Implement unsafe traits
+// 4. Access/modify mutable statics
+// 5. Access union fields
+
+// ── 1. Raw pointers ───────────────────────────────────────────────────────────
+fn demo_raw_pointers() {
+    let x = 42
+    let raw: *const int = &x
+    let val: int = unsafe { *raw }
+    assert(val == 42)
+
+    let mut y = 0
+    let raw_mut: *mut int = &mut y
+    unsafe { *raw_mut = 100 }
+    assert(y == 100)
+
+    // Pointer arithmetic
+    let arr = [1, 2, 3, 4, 5]
+    let p: *const int = arr.as_ptr()
+    let third = unsafe { *p.add(2) }
+    assert(third == 3)
+}
+
+// ── 2. Unsafe functions ───────────────────────────────────────────────────────
+unsafe fn read_at<T: Copy>(ptr: *const T, offset: int) -> T {
+    *ptr.add(offset)
+}
+
+// ── 3. Safe abstraction over unsafe ──────────────────────────────────────────
+struct Slice<T> { ptr: *const T, len: int }
+
+impl<T> Slice<T> {
+    // Safety: ptr must be valid and non-null, pointing to len elements
+    unsafe fn from_raw_parts(ptr: *const T, len: int) -> Slice<T> {
+        Slice { ptr, len }
+    }
+
+    fn get(self, i: int) -> Option<&T> {
+        if i < 0 || i >= self.len { return none }
+        some(unsafe { &*self.ptr.add(i) })
+    }
+}
+
+// ── 4. Mutable static ─────────────────────────────────────────────────────────
+static mut COUNTER: int = 0;
+
+fn increment_counter() {
+    unsafe { COUNTER += 1 }
+}
+
+fn get_counter() -> int { unsafe { COUNTER } }
+
+// ── 5. Extern "C" functions ───────────────────────────────────────────────────
+extern "C" {
+    fn abs(x: i32) -> i32;
+    fn strlen(s: *const u8) -> usize;
+}
+
+fn safe_abs(x: i32) -> i32 { unsafe { abs(x) } }
+
+fn main() {
+    demo_raw_pointers()
+    print("raw pointers ✓")
+
+    let arr = [10, 20, 30]
+    let v = unsafe { read_at(arr.as_ptr(), 1) }
+    assert(v == 20)
+    print("unsafe fn read_at ✓")
+
+    let slice = unsafe { Slice.from_raw_parts(arr.as_ptr(), 3) }
+    assert(slice.get(2) == some(&30))
+    assert(slice.get(5) == none)
+    print("safe Slice abstraction ✓")
+
+    increment_counter()
+    increment_counter()
+    increment_counter()
+    assert(get_counter() == 3)
+    print("mutable static ✓")
+
+    assert(safe_abs(-7i32) == 7i32)
+    print("extern C abs ✓")
+
+    print("chapter 22 unsafe — complete ✓")
+}
