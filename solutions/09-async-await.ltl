@@ -1,0 +1,49 @@
+// Solution 9 — Async / Await
+
+use std.http
+use std.json
+use std.async.{channel, spawn, parallel}
+
+async fn fetch_text(url: string) -> string {
+    let resp = await http.get(url)
+    await resp.text()
+}
+
+async fn fetch_pair(url1: string, url2: string) -> (string, string) {
+    parallel(
+        fetch_text(url1),
+        fetch_text(url2),
+    ) |> await
+}
+
+async fn channel_demo() -> [int] {
+    let (tx, rx) = channel()
+
+    spawn(async || {
+        for i in range(1, 6) {
+            await tx.send(i)
+        }
+        tx.close()
+    })
+
+    mut results = []
+    while let some(v) = await rx.recv() {
+        results.push(v)
+    }
+    results
+}
+
+async fn main() {
+    let body = await fetch_text("https://httpbin.org/get")
+    print("fetch_text length: ${body.len()}")
+
+    let (a, b) = await fetch_pair("https://httpbin.org/uuid", "https://httpbin.org/ip")
+    print("pair: ${a.len()} bytes, ${b.len()} bytes")
+
+    let nums = await channel_demo()
+    print("channel_demo: ${nums}")
+    assert_eq(nums, [1, 2, 3, 4, 5])
+    print("Exercise 9 complete!")
+}
+
+main()
