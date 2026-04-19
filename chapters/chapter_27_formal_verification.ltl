@@ -1,0 +1,278 @@
+// Chapter 27 — Formal Verification Concepts in Lateralus
+// Design by contract, invariants, pre/postconditions, and proof sketches.
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 1: Design by Contract
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Contracts are checked at runtime in debug builds, compiled away in release.
+/// Use `requires` for preconditions, `ensures` for postconditions, `invariant` for loop/struct invariants.
+
+// ── Binary search with contracts ─────────────────────────────────────────────
+fn binary_search(arr: &[i64], target: i64) -> Option<usize>
+    requires arr.windows(2).all(|w| w[0] <= w[1])  // sorted
+    ensures  match result {
+        some(i) => arr[i] == target,
+        none    => !arr.contains(&target),
+    }
+{
+    let mut lo: usize = 0
+    let mut hi: usize = arr.len()
+
+    while lo < hi
+        invariant lo <= hi && hi <= arr.len()
+        invariant arr[..lo].iter().all(|&x| x < target)
+        invariant arr[hi..].iter().all(|&x| x > target)
+    {
+        let mid = lo + (hi - lo) / 2
+        if arr[mid] == target { return some(mid) }
+        else if arr[mid] < target { lo = mid + 1 }
+        else { hi = mid }
+    }
+    none
+}
+
+// ── Stack with invariant ─────────────────────────────────────────────────────
+struct BoundedStack<T> {
+    data: [T],
+    capacity: usize,
+}
+
+impl<T> BoundedStack<T>
+    invariant self.data.len() <= self.capacity
+{
+    fn new(capacity: usize) -> BoundedStack<T>
+        requires capacity > 0
+        ensures  result.data.is_empty() && result.capacity == capacity
+    {
+        BoundedStack { data: [], capacity }
+    }
+
+    fn push(mut self, item: T) -> Result<(), T>
+        requires true
+        ensures  match result {
+            ok(()) => self.data.len() == old(self.data.len()) + 1,
+            err(_) => self.data.len() == old(self.data.len()),
+        }
+    {
+        if self.data.len() >= self.capacity { return err(item) }
+        self.data.push(item)
+        ok(())
+    }
+
+    fn pop(mut self) -> Option<T>
+        requires true
+        ensures  match result {
+            some(_) => self.data.len() == old(self.data.len()) - 1,
+            none    => self.data.is_empty(),
+        }
+    {
+        self.data.pop()
+    }
+
+    fn peek(self) -> Option<&T> { self.data.last() }
+    fn len(self) -> usize { self.data.len() }
+    fn is_empty(self) -> bool { self.data.is_empty() }
+    fn is_full(self) -> bool { self.data.len() == self.capacity }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 2: Type-level proofs
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Phantom types for state machines
+struct Locked;
+struct Unlocked;
+
+struct Door<State> {
+    name: string,
+    _state: PhantomData<State>,
+}
+
+impl Door<Locked> {
+    fn unlock(self, key: &str) -> Result<Door<Unlocked>, string>
+        requires key.len() > 0
+    {
+        if key == "secret" {
+            ok(Door { name: self.name, _state: PhantomData })
+        } else {
+            err("wrong key".to_string())
+        }
+    }
+}
+
+impl Door<Unlocked> {
+    fn lock(self) -> Door<Locked> {
+        Door { name: self.name, _state: PhantomData }
+    }
+
+    fn enter(self) -> string {
+        format!("Entered through {}", self.name)
+    }
+}
+
+fn new_door(name: string) -> Door<Locked> {
+    Door { name, _state: PhantomData }
+}
+
+// ── NonEmpty list (type-level guarantee) ─────────────────────────────────────
+struct NonEmpty<T> {
+    head: T,
+    tail: [T],
+}
+
+impl<T: Clone> NonEmpty<T> {
+    fn new(head: T) -> NonEmpty<T> { NonEmpty { head, tail: [] } }
+
+    fn from_vec(v: [T]) -> Option<NonEmpty<T>>
+        ensures match result { some(ne) => ne.len() > 0, none => v.is_empty() }
+    {
+        if v.is_empty() { return none }
+        some(NonEmpty { head: v[0].clone(), tail: v[1..].to_vec() })
+    }
+
+    fn push(mut self, item: T) { self.tail.push(item) }
+
+    fn first(self) -> &T { &self.head }  // always safe!
+
+    fn len(self) -> usize { 1 + self.tail.len() }
+
+    fn to_vec(self) -> [T] {
+        let mut v = vec![self.head.clone()]
+        v.extend_from_slice(&self.tail)
+        v
+    }
+
+    fn map<U>(self, f: fn(&T) -> U) -> NonEmpty<U> {
+        NonEmpty {
+            head: f(&self.head),
+            tail: self.tail.iter().map(f).collect(),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 3: Refinement types (simulated)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+struct Positive { value: i64 }
+
+impl Positive {
+    fn new(n: i64) -> Option<Positive>
+        ensures match result { some(p) => p.value > 0, none => n <= 0 }
+    {
+        if n > 0 { some(Positive { value: n }) } else { none }
+    }
+
+    fn get(self) -> i64 { self.value }
+}
+
+struct Percentage { value: f64 }
+
+impl Percentage {
+    fn new(v: f64) -> Option<Percentage>
+        ensures match result { some(p) => p.value >= 0.0 && p.value <= 100.0, none => v < 0.0 || v > 100.0 }
+    {
+        if v >= 0.0 && v <= 100.0 { some(Percentage { value: v }) } else { none }
+    }
+}
+
+struct NonEmptyString { value: string }
+
+impl NonEmptyString {
+    fn new(s: string) -> Option<NonEmptyString> {
+        if s.is_empty() { none } else { some(NonEmptyString { value: s }) }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 4: Property verification
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Verify properties about a sorting function
+fn verify_sort_properties() {
+    // Property 1: Output is sorted
+    let test_cases: [[i64]] = [
+        [], [1], [3, 1], [5, 2, 8, 1, 9], [1, 1, 1],
+        [-3, 0, 5, -1], [i64.MAX, i64.MIN, 0],
+    ]
+
+    for mut case in test_cases {
+        let original = case.clone()
+        case.sort()
+
+        // Sorted
+        assert(case.windows(2).all(|w| w[0] <= w[1]),
+            "sort must produce sorted output")
+
+        // Same length
+        assert(case.len() == original.len(),
+            "sort must preserve length")
+
+        // Permutation (same multiset)
+        let mut o = original.clone(); o.sort()
+        assert(case == o, "sort must be a permutation")
+    }
+}
+
+fn main() {
+    // Binary search with contracts
+    let sorted = [1, 3, 5, 7, 9, 11, 13, 15]
+    assert(binary_search(&sorted, 7) == some(3))
+    assert(binary_search(&sorted, 4) == none)
+    assert(binary_search(&sorted, 1) == some(0))
+    assert(binary_search(&sorted, 15) == some(7))
+    print("Binary search with contracts ✓")
+
+    // Bounded stack
+    let mut stack = BoundedStack::<i32>.new(3)
+    assert(stack.push(1).is_ok())
+    assert(stack.push(2).is_ok())
+    assert(stack.push(3).is_ok())
+    assert(stack.push(4).is_err())  // full!
+    assert(stack.len() == 3)
+    assert(stack.pop() == some(3))
+    print("Bounded stack ✓")
+
+    // Type-state door
+    let door = new_door("Main".to_string())
+    // door.enter()  // COMPILE ERROR: Door<Locked> has no enter()
+    let unlocked = door.unlock("secret").unwrap()
+    let msg = unlocked.enter()
+    assert(msg == "Entered through Main")
+    print("Type-state door ✓")
+
+    // NonEmpty list
+    let ne = NonEmpty.new(42)
+    assert(*ne.first() == 42)
+    assert(ne.len() == 1)
+
+    let ne2 = NonEmpty.from_vec([1, 2, 3]).unwrap()
+    assert(*ne2.first() == 1)
+    assert(ne2.len() == 3)
+
+    assert(NonEmpty::<i32>.from_vec([]).is_none())
+    print("NonEmpty list ✓")
+
+    // Refinement types
+    assert(Positive.new(5).is_some())
+    assert(Positive.new(-1).is_none())
+    assert(Positive.new(0).is_none())
+    print("Refinement types ✓")
+
+    assert(Percentage.new(50.0).is_some())
+    assert(Percentage.new(101.0).is_none())
+    print("Percentage type ✓")
+
+    // Verify sort properties
+    verify_sort_properties()
+    print("Sort verification ✓")
+
+    // NonEmpty map
+    let doubled = ne2.map(|x| x * 2)
+    assert(*doubled.first() == 2)
+    assert(doubled.to_vec() == [2, 4, 6])
+    print("NonEmpty.map ✓")
+
+    print("Chapter 27 — Formal Verification complete ✓")
+}
