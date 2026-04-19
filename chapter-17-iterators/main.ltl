@@ -1,0 +1,49 @@
+// chapter-17 — Iterators and Lazy Evaluation
+
+// Lateralus iterators are lazy chains; nothing runs until consumed
+
+fn main() {
+    // Basic lazy chain
+    let first_three_even_squares: [int] =
+        (0..)                          // infinite range
+        |> filter(|x| x % 2 == 0)
+        |> map(|x| x * x)
+        |> take(5)
+        |> collect()
+    assert(first_three_even_squares == [0, 4, 16, 36, 64])
+
+    // zip and enumerate
+    let names  = ["Alice", "Bob", "Carol"]
+    let scores = [95, 87, 92]
+    let report: [(int, string, int)] =
+        names.iter()
+        |> zip(scores.iter())
+        |> enumerate()
+        |> map(|(i, (n, s))| (i + 1, n, s))
+        |> collect()
+    assert(report[0] == (1, "Alice", 95))
+
+    // flat_map
+    let words = ["hello world", "foo bar baz"]
+    let all_words: [string] = words |> flat_map(|s| s.split(" ")) |> collect()
+    assert(all_words.len() == 5)
+
+    // fold / reduce
+    let product = [1, 2, 3, 4, 5] |> fold(1, |acc, x| acc * x)
+    assert(product == 120)
+
+    // scan (running total)
+    let running = [1, 2, 3, 4] |> scan(0, |acc, x| acc + x) |> collect()
+    assert(running == [1, 3, 6, 10])
+
+    // chain
+    let combined = [1, 2].iter() |> chain([3, 4].iter()) |> collect()
+    assert(combined == [1, 2, 3, 4])
+
+    // any / all / find
+    assert([2, 4, 6] |> all(|x| x % 2 == 0))
+    assert([1, 2, 3] |> any(|x| x > 2))
+    assert([1, 2, 3] |> find(|x| x > 1) == some(2))
+
+    print("chapter 17 — all assertions passed ✓")
+}
