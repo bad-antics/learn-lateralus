@@ -1,0 +1,94 @@
+// Solution 15 — Real Project: Mini Task Manager
+
+enum Status { Todo, InProgress, Done }
+
+impl Status {
+    fn eq(self, other: Status) -> bool {
+        match (self, other) {
+            (Status.Todo,       Status.Todo)       => true,
+            (Status.InProgress, Status.InProgress) => true,
+            (Status.Done,       Status.Done)       => true,
+            _                                       => false,
+        }
+    }
+}
+
+struct Task {
+    id:     int,
+    title:  string,
+    status: Status,
+    tags:   [string],
+}
+
+struct TaskManager {
+    tasks:   [Task],
+    next_id: int,
+}
+
+impl TaskManager {
+    fn new() -> TaskManager {
+        TaskManager { tasks: [], next_id: 1 }
+    }
+
+    fn add(mut self, title: string, tags: [string]) -> Task {
+        let task = Task { id: self.next_id, title, status: Status.Todo, tags }
+        self.tasks.push(task)
+        self.next_id += 1
+        task
+    }
+
+    fn list(self, filter_status: Status?) -> [Task] {
+        match filter_status {
+            none    => self.tasks.clone(),
+            some(s) => self.tasks |> filter(t => t.status.eq(s)) |> collect(),
+        }
+    }
+
+    fn update_status(mut self, id: int, new_status: Status) -> Result<(), string> {
+        match self.tasks.find_index(t => t.id == id) {
+            none    => err("Task ${id} not found"),
+            some(i) => { self.tasks[i].status = new_status; ok(()) },
+        }
+    }
+
+    fn delete(mut self, id: int) -> Result<(), string> {
+        let before = self.tasks.len()
+        self.tasks = self.tasks |> filter(t => t.id != id) |> collect()
+        if self.tasks.len() == before { err("Task ${id} not found") } else { ok(()) }
+    }
+
+    fn search(self, query: string) -> [Task] {
+        let q = query.to_lowercase()
+        self.tasks |> filter(t =>
+            t.title.to_lowercase().contains(q) ||
+            t.tags  |> any(tag => tag.to_lowercase().contains(q))
+        ) |> collect()
+    }
+}
+
+fn main() {
+    mut tm = TaskManager.new()
+
+    let t1 = tm.add("Write chapter 15", ["writing", "docs"])
+    let t2 = tm.add("Fix bug #42",      ["bug"])
+    let t3 = tm.add("Add tests",        ["testing"])
+
+    assert_eq(tm.list(none).len(), 3)
+
+    tm.update_status(t1.id, Status.Done).unwrap()
+    tm.update_status(t2.id, Status.InProgress).unwrap()
+
+    let done = tm.list(some(Status.Done))
+    assert_eq(done.len(), 1)
+    assert_eq(done[0].title, "Write chapter 15")
+
+    let found = tm.search("bug")
+    assert_eq(found.len(), 1)
+
+    tm.delete(t3.id).unwrap()
+    assert_eq(tm.list(none).len(), 2)
+
+    print("Exercise 15 complete!")
+}
+
+main()
