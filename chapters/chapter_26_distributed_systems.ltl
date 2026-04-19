@@ -1,0 +1,321 @@
+// Chapter 26 — Distributed Systems in Lateralus
+// Raft consensus, distributed hash tables, and CRDTs.
+
+use std.net.{TcpStream, TcpListener}
+use std.sync.{Arc, Mutex, RwLock}
+use std.collections.HashMap
+use std.thread
+use std.time.{Duration, Instant}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 1: Raft Consensus
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type NodeId = u64
+type Term = u64
+type LogIndex = u64
+
+enum RaftState { Follower, Candidate, Leader }
+
+struct LogEntry {
+    term:    Term,
+    index:   LogIndex,
+    command: [u8],
+}
+
+struct RaftNode {
+    id:            NodeId,
+    state:         RaftState,
+    current_term:  Term,
+    voted_for:     Option<NodeId>,
+    log:           [LogEntry],
+    commit_index:  LogIndex,
+    last_applied:  LogIndex,
+    // Leader state
+    next_index:    HashMap<NodeId, LogIndex>,
+    match_index:   HashMap<NodeId, LogIndex>,
+    peers:         [NodeId],
+    election_timeout: Duration,
+    last_heartbeat:   Instant,
+}
+
+enum RaftMessage {
+    RequestVote {
+        term: Term, candidate_id: NodeId,
+        last_log_index: LogIndex, last_log_term: Term,
+    },
+    RequestVoteResponse { term: Term, vote_granted: bool },
+    AppendEntries {
+        term: Term, leader_id: NodeId,
+        prev_log_index: LogIndex, prev_log_term: Term,
+        entries: [LogEntry], leader_commit: LogIndex,
+    },
+    AppendEntriesResponse { term: Term, success: bool, match_index: LogIndex },
+}
+
+impl RaftNode {
+    fn new(id: NodeId, peers: [NodeId]) -> RaftNode {
+        RaftNode {
+            id, state: RaftState.Follower, current_term: 0,
+            voted_for: none, log: [], commit_index: 0, last_applied: 0,
+            next_index: HashMap.new(), match_index: HashMap.new(),
+            peers, election_timeout: Duration.from_millis(150 + (id * 50) % 150),
+            last_heartbeat: Instant.now(),
+        }
+    }
+
+    fn handle_request_vote(mut self, msg: RaftMessage) -> RaftMessage {
+        if let RaftMessage.RequestVote { term, candidate_id, last_log_index, last_log_term } = msg {
+            if term > self.current_term {
+                self.current_term = term
+                self.state = RaftState.Follower
+                self.voted_for = none
+            }
+
+            let vote_granted = term >= self.current_term
+                && (self.voted_for.is_none() || self.voted_for == some(candidate_id))
+                && self.is_log_up_to_date(last_log_index, last_log_term)
+
+            if vote_granted { self.voted_for = some(candidate_id) }
+            return RaftMessage.RequestVoteResponse { term: self.current_term, vote_granted }
+        }
+        RaftMessage.RequestVoteResponse { term: self.current_term, vote_granted: false }
+    }
+
+    fn handle_append_entries(mut self, msg: RaftMessage) -> RaftMessage {
+        if let RaftMessage.AppendEntries { term, leader_id, prev_log_index, prev_log_term, entries, leader_commit } = msg {
+            if term < self.current_term {
+                return RaftMessage.AppendEntriesResponse { term: self.current_term, success: false, match_index: 0 }
+            }
+            self.current_term = term
+            self.state = RaftState.Follower
+            self.last_heartbeat = Instant.now()
+
+            // Check log consistency
+            if prev_log_index > 0 {
+                if self.log.len() < prev_log_index as usize {
+                    return RaftMessage.AppendEntriesResponse { term: self.current_term, success: false, match_index: 0 }
+                }
+                if self.log[(prev_log_index - 1) as usize].term != prev_log_term {
+                    return RaftMessage.AppendEntriesResponse { term: self.current_term, success: false, match_index: 0 }
+                }
+            }
+
+            // Append new entries
+            let mut idx = prev_log_index as usize
+            for entry in entries {
+                if idx < self.log.len() { self.log[idx] = entry }
+                else { self.log.push(entry) }
+                idx += 1
+            }
+
+            if leader_commit > self.commit_index {
+                self.commit_index = std.cmp.min(leader_commit, self.log.len() as u64)
+            }
+
+            RaftMessage.AppendEntriesResponse { term: self.current_term, success: true, match_index: idx as u64 }
+        } else {
+            RaftMessage.AppendEntriesResponse { term: self.current_term, success: false, match_index: 0 }
+        }
+    }
+
+    fn is_log_up_to_date(self, last_index: LogIndex, last_term: Term) -> bool {
+        let my_last_term = self.log.last().map(|e| e.term).unwrap_or(0)
+        let my_last_index = self.log.len() as u64
+        last_term > my_last_term || (last_term == my_last_term && last_index >= my_last_index)
+    }
+
+    fn start_election(mut self) {
+        self.current_term += 1
+        self.state = RaftState.Candidate
+        self.voted_for = some(self.id)
+        self.last_heartbeat = Instant.now()
+    }
+
+    fn become_leader(mut self) {
+        self.state = RaftState.Leader
+        let last_log = self.log.len() as u64 + 1
+        for &peer in &self.peers {
+            self.next_index.insert(peer, last_log)
+            self.match_index.insert(peer, 0)
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Part 2: CRDTs (Conflict-free Replicated Data Types)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// G-Counter: grow-only counter
+struct GCounter {
+    counts: HashMap<NodeId, u64>,
+}
+
+impl GCounter {
+    fn new() -> GCounter { GCounter { counts: HashMap.new() } }
+
+    fn increment(mut self, node: NodeId) {
+        *self.counts.entry(node).or_insert(0) += 1
+    }
+
+    fn value(self) -> u64 { self.counts.values().sum() }
+
+    fn merge(mut self, other: &GCounter) {
+        for (&node, &count) in &other.counts {
+            let entry = self.counts.entry(node).or_insert(0)
+            *entry = std.cmp.max(*entry, count)
+        }
+    }
+}
+
+// PN-Counter: increment and decrement
+struct PNCounter {
+    positive: GCounter,
+    negative: GCounter,
+}
+
+impl PNCounter {
+    fn new() -> PNCounter { PNCounter { positive: GCounter.new(), negative: GCounter.new() } }
+    fn increment(mut self, node: NodeId) { self.positive.increment(node) }
+    fn decrement(mut self, node: NodeId) { self.negative.increment(node) }
+    fn value(self) -> i64 { self.positive.value() as i64 - self.negative.value() as i64 }
+    fn merge(mut self, other: &PNCounter) {
+        self.positive.merge(&other.positive)
+        self.negative.merge(&other.negative)
+    }
+}
+
+// LWW-Register: last-writer-wins register
+struct LWWRegister<T> {
+    value: T,
+    timestamp: u64,
+    node: NodeId,
+}
+
+impl<T: Clone> LWWRegister<T> {
+    fn new(value: T, node: NodeId) -> LWWRegister<T> {
+        LWWRegister { value, timestamp: 0, node }
+    }
+
+    fn set(mut self, value: T, timestamp: u64) {
+        if timestamp > self.timestamp {
+            self.value = value
+            self.timestamp = timestamp
+        }
+    }
+
+    fn merge(mut self, other: &LWWRegister<T>) {
+        if other.timestamp > self.timestamp {
+            self.value = other.value.clone()
+            self.timestamp = other.timestamp
+            self.node = other.node
+        }
+    }
+
+    fn get(self) -> &T { &self.value }
+}
+
+// OR-Set: observed-remove set
+struct ORSet<T: Hash + Eq + Clone> {
+    elements: HashMap<T, HashSet<(NodeId, u64)>>,  // value → set of (node, unique_tag)
+    tombstones: HashMap<T, HashSet<(NodeId, u64)>>,
+    counter: u64,
+}
+
+impl<T: Hash + Eq + Clone> ORSet<T> {
+    fn new() -> ORSet<T> {
+        ORSet { elements: HashMap.new(), tombstones: HashMap.new(), counter: 0 }
+    }
+
+    fn add(mut self, value: T, node: NodeId) {
+        self.counter += 1
+        self.elements.entry(value).or_insert(HashSet.new()).insert((node, self.counter))
+    }
+
+    fn remove(mut self, value: &T) {
+        if let some(tags) = self.elements.remove(value) {
+            self.tombstones.entry(value.clone()).or_insert(HashSet.new()).extend(tags)
+        }
+    }
+
+    fn contains(self, value: &T) -> bool {
+        self.elements.get(value).map(|s| !s.is_empty()).unwrap_or(false)
+    }
+
+    fn values(self) -> [&T] { self.elements.keys().collect() }
+
+    fn merge(mut self, other: &ORSet<T>) {
+        for (value, tags) in &other.elements {
+            let my_tags = self.elements.entry(value.clone()).or_insert(HashSet.new())
+            let my_tombstones = self.tombstones.get(value).cloned().unwrap_or(HashSet.new())
+            for tag in tags {
+                if !my_tombstones.contains(tag) { my_tags.insert(*tag); }
+            }
+        }
+    }
+}
+
+fn main() {
+    // ── Raft ─────────────────────────────────────────────────────────────────
+    let mut node1 = RaftNode.new(1, [2, 3])
+    let mut node2 = RaftNode.new(2, [1, 3])
+    let mut node3 = RaftNode.new(3, [1, 2])
+
+    // Node 1 starts election
+    node1.start_election()
+    assert(matches!(node1.state, RaftState.Candidate))
+    assert(node1.current_term == 1)
+    print("Raft: Node 1 started election, term=${node1.current_term} ✓")
+
+    // Node 2 votes
+    let vote_req = RaftMessage.RequestVote {
+        term: 1, candidate_id: 1, last_log_index: 0, last_log_term: 0,
+    }
+    let resp = node2.handle_request_vote(vote_req)
+    if let RaftMessage.RequestVoteResponse { vote_granted, .. } = resp {
+        assert(vote_granted)
+        print("Raft: Node 2 voted for Node 1 ✓")
+    }
+
+    // Node 1 becomes leader
+    node1.become_leader()
+    assert(matches!(node1.state, RaftState.Leader))
+    print("Raft: Node 1 is leader ✓")
+
+    // ── G-Counter ────────────────────────────────────────────────────────────
+    let mut c1 = GCounter.new()
+    let mut c2 = GCounter.new()
+    c1.increment(1); c1.increment(1); c1.increment(1)
+    c2.increment(2); c2.increment(2)
+    c1.merge(&c2)
+    assert(c1.value() == 5)
+    print("G-Counter: 3 + 2 = ${c1.value()} ✓")
+
+    // ── PN-Counter ───────────────────────────────────────────────────────────
+    let mut pn = PNCounter.new()
+    pn.increment(1); pn.increment(1); pn.increment(1)
+    pn.decrement(2)
+    assert(pn.value() == 2)
+    print("PN-Counter: 3 - 1 = ${pn.value()} ✓")
+
+    // ── LWW-Register ─────────────────────────────────────────────────────────
+    let mut reg1 = LWWRegister.new("hello", 1)
+    let mut reg2 = LWWRegister.new("hello", 2)
+    reg1.set("world", 10)
+    reg2.set("lateralus", 20)
+    reg1.merge(&reg2)
+    assert(*reg1.get() == "lateralus")
+    print("LWW-Register: last write wins = '${reg1.get()}' ✓")
+
+    // ── OR-Set ───────────────────────────────────────────────────────────────
+    let mut set1 = ORSet::<string>.new()
+    set1.add("apple".to_string(), 1)
+    set1.add("banana".to_string(), 1)
+    assert(set1.contains(&"apple".to_string()))
+    set1.remove(&"apple".to_string())
+    assert(!set1.contains(&"apple".to_string()))
+    assert(set1.contains(&"banana".to_string()))
+    print("OR-Set: add/remove ✓")
+
+    print("Chapter 26 — Distributed Systems complete ✓")
+}
