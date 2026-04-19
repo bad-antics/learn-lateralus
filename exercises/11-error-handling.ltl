@@ -1,0 +1,56 @@
+// Exercise 11 — Error Handling
+// Run: lateralus run exercises/11-error-handling.ltl
+
+enum MathError {
+    DivisionByZero,
+    Overflow,
+    NegativeSquareRoot,
+}
+
+impl MathError {
+    fn to_string(self) -> string {
+        match self {
+            MathError.DivisionByZero     => "division by zero",
+            MathError.Overflow           => "overflow",
+            MathError.NegativeSquareRoot => "negative square root",
+        }
+    }
+}
+
+// 1. Safe division
+fn safe_div(a: float, b: float) -> Result<float, MathError> {
+    // TODO
+    ok(0.0)
+}
+
+// 2. Safe square root
+fn safe_sqrt(n: float) -> Result<float, MathError> {
+    // TODO
+    ok(0.0)
+}
+
+// 3. Chain: compute sqrt(a / b)
+fn sqrt_of_div(a: float, b: float) -> Result<float, MathError> {
+    // TODO: use ? operator
+    ok(0.0)
+}
+
+// 4. Parse a comma-separated list of floats
+fn parse_floats(s: string) -> Result<[float], string> {
+    // TODO: return err if any token fails to parse
+    ok([])
+}
+
+fn main() {
+    print(safe_div(10.0, 2.0))        // ok(5.0)
+    print(safe_div(10.0, 0.0))        // err(DivisionByZero)
+    print(safe_sqrt(4.0))             // ok(2.0)
+    print(safe_sqrt(-1.0))            // err(NegativeSquareRoot)
+    print(sqrt_of_div(16.0, 4.0))     // ok(2.0)
+    print(sqrt_of_div(16.0, 0.0))     // err(DivisionByZero)
+    print(parse_floats("1.0,2.5,3"))  // ok([1.0, 2.5, 3.0])
+    print(parse_floats("1.0,abc"))    // err(...)
+    print("Exercise 11 complete!")
+}
+
+main()
