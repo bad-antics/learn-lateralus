@@ -1,0 +1,46 @@
+// Exercise 9 — Async / Await
+// Complete each TODO and run: lateralus run exercises/09-async-await.ltl
+
+use std.http
+use std.json
+use std.async.{channel, spawn, parallel, timeout}
+
+// 1. Write an async function that fetches a URL and returns the response body
+async fn fetch_text(url: string) -> string {
+    // TODO: await an HTTP GET and return .text()
+    ""
+}
+
+// 2. Fetch two URLs concurrently and return both bodies
+async fn fetch_pair(url1: string, url2: string) -> (string, string) {
+    // TODO: use parallel() to fetch both at once
+    ("", "")
+}
+
+// 3. Producer / consumer via a channel
+//    Producer: send numbers 1..5, then close
+//    Consumer: collect received values into a list
+async fn channel_demo() -> [int] {
+    let (tx, rx) = channel()
+    // TODO: spawn a producer task
+    mut results = []
+    // TODO: receive until closed, push to results
+    results
+}
+
+async fn main() {
+    // 1
+    let body = await fetch_text("https://httpbin.org/get")
+    print("fetch_text length: ${body.len()}")
+
+    // 2
+    let (a, b) = await fetch_pair("https://httpbin.org/uuid", "https://httpbin.org/ip")
+    print("pair: ${a.len()} bytes, ${b.len()} bytes")
+
+    // 3
+    let nums = await channel_demo()
+    print("channel_demo: ${nums}")
+    assert_eq(nums, [1, 2, 3, 4, 5])
+}
+
+main()
